@@ -1,0 +1,259 @@
+
+<!-- saved from url=(0046)http://oucsace.cs.ohiou.edu/~bhumphre/gdb.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>
+GDB Help Tutorial -- CS361
+</title>
+</head>
+
+
+<body>
+
+<h2>GDB Tutorial</h2>
+<h3>Scope</h3>
+
+This tutorial is meant for very simple commands and functionality in
+gdb.  This is meant just to get the users feet on the ground with GDB,
+by no means does it give extremely powerful and complex commands.  It
+basically just shows how to traverse a program in gdb, how to compile
+to use gdb, how to analyze core files, and how to determine program
+flow.
+
+<p>
+</p><h3>Conventions</h3>
+
+The following will show you text conventions that should be followed
+for this tutorial.
+
+<pre>Text that will be outputted by gdb will appear like this</pre>
+
+<pre><font color="red">Text that needs to typed in by the user will appear in red</font></pre>
+
+Author Comments will appear normally like this, or <pre><font color="green">green like this</font></pre>
+
+<br> 
+
+You can find sample code here, it contains a binary called 'hello'.
+There are tree files associated to this binary, hello.cc which is
+where main is located, and word.cc/h this is a c++ style class.  This
+example code will be used throughout this tutorial.
+
+<p>
+</p><h3>Prerequisites</h3>
+<ul>
+  <li>C/C++ knowledge (you need to be able to code to have something to gdb..)
+  </li><li>Comfort with the command line
+  </li><li>Grab the <a href="http://oucsace.cs.ohiou.edu/~bhumphre/hello/">hello code</a>, and run make on it.
+      This will work on the prime system, and most other systems.
+      Make sure you grab all four files in this directory.
+      This code is also available directly on prime in the course's
+      code-egs directory.
+</li></ul>
+<p>
+
+</p><h3>GDB Background</h3>
+GDB stands for GNU Debugger
+
+<h3>Getting Started</h3>
+
+GDB can accomplish four different kinds of goals, start your program:
+Specifying anything that might affect its behavior.  Make your program
+stop on specified conditions.  Examine what has happened, when your
+program has stopped.  Finally, change things in your program, so you
+can experiment with correcting the effects of one bug and go on to
+learn about another.  This tutorial will cover the first three things,
+the fouth is out of the scope of this tutorial.
+<p>
+
+To get started with GDB we need to understand how it works.  GDB first
+looks at the binary exectuable that must be made, it also looks at the
+source files associated with that exectuable.  It then walks through
+your program executing it as if you were running it from the command
+line.  To start GDB we first need to look at how we compile.  To let
+GDB be able to read all that information line by line, we need to
+compile it a bit differently.  Normally we compile things
+as:</p><pre><font color="red">gcc hello.cc</font></pre> Instead of doing
+this, we need to compile with the -g flag as such: <pre><font color="red">gcc -g hello.cc</font></pre> Now we can invoke gdb with the
+new a.out binary.  To invoke gdb we would do the following at the
+command line.  If you use the makefile in the hello directory, it
+will use the -g flag to compile the code.
+
+<pre>odd37% <font color="red">gdb hello</font>
+GNU gdb 4.18
+Copyright 1998 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "sparc-sun-solaris2.6"...
+(gdb)
+</pre>
+
+Above the (gdb) prompt you will notice some text.  It is here that you
+will see any errors that were encountered when trying to load your
+binary.  <p>
+
+</p><h3>Basic Commands</h3>
+<dl>
+  <dt><b>run</b></dt>
+  <dd>Starts the program.  If you do not set up any breakpoints
+      the program will run until it terminates or core dumps
+      :)</dd> 
+  <dt><b>print -var-</b></dt>
+  <dd>This command prints a variable located in the current
+      scope.  For example  
+      <pre>print i</pre>
+      or if a is an array
+      <pre>print a[3]</pre>  Also you can print variables of
+      variables, again if a is an array and i is an integer, 
+      <pre>print a[i]</pre>
+      Finally you can shorten this up, by saying
+      <pre>p a[3]</pre> 
+      'p' is just shorthand of print.
+  </dd>
+  <dt><b>next</b></dt>
+  <dd>This executes the current command, and moves to the next command
+      in the program, this too can be made in shorthand by 'n'
+  </dd>
+  <dt><b>step</b></dt>
+  <dd>This steps through the next command.  There are differences
+      between step and next.  If you are at a function call, and you
+      hit next, then the function will exectute and return.  But if
+      you hit step, then you will go to the first line of that
+      function.  's' is just the shorthand of step.  
+  </dd><dt><b>break -number or function-</b></dt>
+  <dd>This sets a break point.  Its basic functionality is to type
+      break and a filename and line number.  For example lets say we
+      want to stop in word.cc line fourty-three, we could do the
+      following in gdb:
+      <pre>(gdb) <font color="red">break word.cc:43</font>
+Breakpoint 2 at 0x11044: file word.cc, line 43.
+      </pre>
+
+      Break, like all other gdb function can be shorteed to its first
+      letter 'b'.  Also we can stop on a function, lets say we want to
+      stop on the function 'main'.
+      <pre>(gdb)<font color="red"> b main</font> 
+Breakpoint 3 at 0x110bc: file hello.cc, line 40.</pre>
+
+      Finally conditional break points can be set up.  Lets say you
+      have a for loop and you want to see what the value of x is when
+      the index reaches 8001, there is no way you will step through
+      this, so what you want to do is set a conditional breakpoint.
+      Conditionals work just like what we talked about previously, but
+      add some extra at the end. 
+
+      <pre>(gdb) <font color="red">b word.cc:64 if isset==1</font>
+Breakpoint 4 at 0x1100c: file word.cc, line 64.
+      </pre>
+  </dd><dd>
+  </dd><dt><b>continue</b></dt>
+  <dd>Once a breakpoint is hit, and you want to continue to the next
+      breakpoint or simply go to the exiting state of the program, you
+      can use this command.  The shorthand of this, in case you didn't
+      catch the trend, is 'c'</dd> 
+  <dt><b>where</b></dt>
+  <dd>This command is analogous to the backtrace command, and it shows
+      you were in the stack you currnetly are.  For example
+      <pre> (gdb) <font color="red">run</font>
+Starting program: /home/bhumphre/classwork/ta/tutorial/hello
+
+Program received signal SIGSEGV, Segmentation fault.
+0xff2b6dec in strlen () from /usr/lib/libc.so.1
+(gdb) <font color="red">where</font>
+#0  0xff2b6dec in strlen () from /usr/lib/libc.so.1  <font color="green">&lt;--this function is the crashing function</font>
+#1  0xff2ffe18 in _doprnt () from /usr/lib/libc.so.1
+#2  0xff3019d0 in printf () from /usr/lib/libc.so.1  <font color="green">&lt;--This is the function that was in my code</font>
+#3  0x11064 in word::printword (this=0xffbef8b0) at word.cc:21 <font color="green">&lt;-- this is the line that it core dumped at</font>
+#4  0x11110 in main () at hello.cc:14   <font color="green">&lt;-- this is the line where we called printword</font>
+</pre>
+
+</dd></dl>
+
+<p>
+</p><h3>Example Code</h3>
+
+In the example code, it is some simple code that just includes one
+class.  The following set is a transcript of my debugging of this
+code.  Please check this out for yourself.
+
+<pre>Script started on Thu Sep 14 23:58:08 2000
+p2% <font color="red">gdb hello</font>  <font color="green">Starting the Debugger</font>
+GNU gdb 4.18
+Copyright 1998 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "sparc-sun-solaris2.6"...
+(gdb) <font color="red">run</font>
+Starting program: /home/bhumphre/classwork/ta/tutorial/hello 
+
+Program received signal SIGSEGV, Segmentation fault.
+0xff2b6dec in strlen () from /usr/lib/libc.so.1
+<font color="green"> Notice without a breakpoint the run command makes our program seg fault.
+This next command is list, it shows you the lines of the source file near the currently debug line  you are currently using </font>
+(gdb) list
+1       #include <stdio.h>
+2       #include <stdlib.h>
+3       #include <iostream.h>
+4       
+5       #include "word.h"
+6       
+7       int main()
+8       {
+9         word myword;
+10        if((myword.is_word_set()==0))
+(gdb) <font color="red">b main</font>
+Breakpoint 1 at 0x110bc: file hello.cc, line 9.
+(gdb) <font color="red">run</font>
+The program being debugged has been started already.
+Start it from the beginning? (y or n) <font color="red">y</font>
+
+Starting program: /home/bhumphre/classwork/ta/tutorial/hello 
+
+Breakpoint 1, main () at hello.cc:9  <font color="green">It stopped at the break point i set above</font>
+9         word myword;
+(gdb) <font color="red">n</font>
+10        if((myword.is_word_set()==0))
+(gdb) <font color="red">n</font>
+12            myword.setword("hi kathi");
+(gdb) <font color="red">s</font>  <font color="green">we are now stepping into the function word::setword</font>
+word::setword (this=0xffbef820, c=0x130b0 "hi kathi") at word.cc:10
+10        if(isset)
+(gdb) <font color="red">n</font>
+12        inword=strdup(c);
+(gdb) <font color="red">n</font>
+13        isset=1;
+(gdb) <font color="red">n</font>
+14        return 1;  <font color="green">We are now returning out of our function and back into main</font>
+(gdb) <font color="red">n</font>
+15      }
+(gdb) <font color="red">n</font>
+main () at hello.cc:14  <font color="green"> this shows us we are back in main</font>
+14        myword.printword();
+(gdb) <font color="red">s</font>
+word::printword (this=0xffbef820) at word.cc:20  <font color="green">we are now into the printword function</font>
+20        inword=NULL;
+(gdb) <font color="red">n</font>
+21        printf("%s\n", inword);
+(gdb) <font color="red">n</font>
+<font color="green">Here is the seg fault we were seeing before</font>
+Program received signal SIGSEGV, Segmentation fault.
+0xff2b6dec in strlen () from /usr/lib/libc.so.1
+(gdb) <font color="red">where</font>
+#0  0xff2b6dec in strlen () from /usr/lib/libc.so.1
+#1  0xff2ffe18 in _doprnt () from /usr/lib/libc.so.1
+#2  0xff3019d0 in printf () from /usr/lib/libc.so.1
+#3  0x11064 in word::printword (this=0xffbef820) at word.cc:21
+#4  0x11110 in main () at hello.cc:14
+<font color="green">Even though we knew where it bombed out, it is helpful to see where in the program we are</font>
+(gdb) <font color="red">quit</font>
+The program is running.  Exit anyway? (y or n)  <font color="red">y</font>
+</iostream.h></stdlib.h></stdio.h></pre>
+
+<!-- hhmts start -->
+Last modified: Mon Oct 16 13:23:53 EDT 2000
+<!-- hhmts end -->
+ 
+</body></html>

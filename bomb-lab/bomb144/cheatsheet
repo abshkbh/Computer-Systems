@@ -1,0 +1,15 @@
+break file.c:6  
+break my_func
+continue - proceed to next break point
+step , stepi - single step
+next - moves over subroutines as well instead of stepping in them
+print my_var - prints value in hex
+print/x my_var - prints hex value
+watch my_var - stops when value of my_var changes
+backtrace, where - stack trace
+finish - runs until current function has ended
+delete - deletes a specified breakpoint
+info breakpoints - shows info about breakpoints
+print ptr - shows value of ptr
+print *ptr - shows deferenced pointer
+

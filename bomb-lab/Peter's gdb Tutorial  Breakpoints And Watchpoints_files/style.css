@@ -1,0 +1,63 @@
+body {
+	background: #FFFFFF;
+	lineHeight: 115%
+}
+
+blockquote {
+	margin-left: 5em;
+}
+
+h2 {
+	color: IndianRed;
+	font-family: Sans-serif
+}
+
+h3 {
+	color: DarkGoldenrod;
+	font-family: Sans-serif
+}
+
+ol {
+	margin-left: 8ex;
+}
+
+p {
+	margin-left: 3ex;
+}
+
+pre {
+	margin-left: 8ex;
+	margin-right: 8ex;
+	font-size: 75%;
+}
+
+blockquote.demo, pre.demo {
+	background-color: #FFFAF0;
+	line-height: 130%;
+	border: 1pt;
+	border-style: dotted;
+	padding: 1ex;
+}
+
+blockquote.demo, pre.code {
+	background-color: #EFEAE0;
+	line-height: 130%;
+	border: 1pt;
+	border-style: ridge;
+	padding: 1ex;
+}
+
+span.tip {
+	color: DarkGreen;
+	font-weight: bolder;
+}
+
+tt {
+	font-size: 90%;
+	font-weight: bold;
+	padding-left: .8ex;
+}
+
+ol.exercise {
+	margin-left: 5ex;
+}

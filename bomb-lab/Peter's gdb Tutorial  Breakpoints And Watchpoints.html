@@ -1,0 +1,416 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- saved from url=(0074)http://www.dirac.org/linux/gdb/04-Breakpoints_And_Watchpoints.php#breaking -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+	<title>Peter's gdb Tutorial: Breakpoints And Watchpoints </title>
+	<link rel="STYLESHEET" type="text/css" href="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/style.css" title="Style">
+	</head>
+	<body>
+
+	<img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/gnu-head.png" align="right" alt=""><h1>Using GNU's GDB Debugger</h1><h1>Breakpoints And Watchpoints</h1><h4>By Peter Jay Salzman</h4><hr><table width="100%"><tbody><tr><td align="left">Previous: <a href="http://www.dirac.org/linux/gdb/03-Initialization,_Listing,_And_Running.php">Initialization, Listing, And Running</a></td><td align="right">Next: <a href="http://www.dirac.org/linux/gdb/05-Stepping_And_Resuming.php">Stepping And Resuming</a></td></tr></tbody></table><hr>
+
+
+<!--
+
+<pre class="demo">
+   $ gcc -g -c -W -Wall deriv-broken.c derivdriver-broken.c
+   $ gcc -o deriv-broken deriv-broken.o derivdriver-broken.o -lm
+</pre>
+
+<p>The program is supposed to numerically calculate the derivative of <tt>cos(log(x))</tt> at some point <tt>x</tt> which is
+given as an argument to the program.  Everyone knows the exact answer is <tt>-sin(log(x))/x</tt>, but this program uses three
+numerical algorithms to calculate the derivative and compares their relative error for different sizes of <tt>dx</tt>.  The
+program is quite sick, as seen if you run it.</p>
+
+-->
+
+
+
+
+
+
+<br><br><a name="breakpoints,watchpoints,andcatchpoints"><h2>Breakpoints, Watchpoints, and Catchpoints</h2></a>
+
+<p>So far you know how to list source code and run a program from within gdb.  But you already knew how to do that
+<i>without</i> gdb.  What else does gdb give us?  To do anything really useful with gdb, you need to set breakpoints which
+temporarily pause your program's execution so you can do useful debugging work like inspecting variables and watching the
+program's execution in an atomic line-by-line fashion.  This right here is the magic of a symbolic debugger.</p>
+
+<p>Breakpoints come in three flavors:</p>
+<ol>
+<li>A <b>breakpoint</b> stops your program whenever a particular point in the program is reached.  We will discuss breakpoints
+	momentarily.</li>
+<li>A <b>watchpoint</b> stops your program whenever the value of a variable or expression changes.  We'll discuss watchpoints
+	later on in this chapter.</li>
+<li>A <b>catchpoint</b> stops your program whenever a particular event occurs.  We won't discuss catchpoints until I get a chance
+	to write about them.</li>
+</ol>
+
+<!--
+To help with the discussion, there's some broken code you can download and follow along with: <a href="./code/fgets/fgets.c">fgets.c</a>, <a href="./code/fgets/main.c">main.c</a>, and <a href="./code/fgets/fgets.h">fgets.h</a>.  Compile the code with:</p>
+-->
+
+
+
+
+
+
+
+<br><br><a name="breakpoints"><h2>Breakpoints</h2></a>
+
+<p>A breakpoint stops your program whenever a particular place in the program is reached.  Here are some examples of what a
+breakpoint does:</p>
+
+<ul>
+<i>Mr. Computer, won't you please stop when...</i>
+<ul>
+<li><i>you reach line 420 of the current source code file?</i></li>
+<li><i>you enter the function <tt>validateInput()</tt>?</i></li>
+<li><i>you reach line 2718 of the file <b>video.c</b>?</i></li>
+</ul>
+</ul><p></p>
+
+<p>All those requests have one thing in common: they ask gdb to stop based on reaching some location within the program.  That's
+what a breakpoint does.  There are two things I'd like to mention before we start:</p>
+
+<ol>
+<li><b>What does "stopping at line 5" mean?</b>
+	<p>When gdb stops at "line 5", this means that gdb is currently waiting "between" lines 4 and 5.  Line 5 hasn't executed yet.
+	Keep this in mind!  You can execute line 5 with the <tt>next</tt> command, but line 5 has not happened yet.</p></li>
+<li><b>Why did gdb stop here?</b>
+	<p>Sometimes you may be surprised at where gdb stops.  You may have specified a breakpoint at line 5 of the source code, but
+	gdb could stop at line 7, for instance.  This can happen for 2 reasons.  First, if you compile a program with optimization
+	set, some lines of source code may be optimized out of existence; they exist in your source code, but not in the executable.
+	Secondly, not every line of source code gets compiled into machine code instruction.  See the section on "until" (<b>FIXME:</b>
+	when I write it).  Consider the code below:</p>
+	<pre class="code">1   #include &lt;stdio.h&gt;
+2      
+3   int main( void )
+4   {
+5        int i;
+6        i = 3;
+7   
+8        return 0;
+9   }  
+</pre>
+	<p>Inserting a breakpoint at line X makes your program pause at line Y...</p>
+
+	<table border="1">
+	<tbody><tr><td colspan="2">unoptimized code</td><td colspan="2">optimized code</td></tr>
+	<tr><td>Breakpoint at line   </td><td>Program pauses at line</td><td>Breakpoint set at line</td><td>Program pauses at line</td></tr>
+	<tr><td>1--4, <tt>main()</tt></td><td>4                     </td><td>1--4, <tt>main()</tt> </td><td>4                     </td></tr>
+	<tr><td>5, 6                 </td><td>6                     </td><td>5--9                  </td><td>9                     </td></tr>
+	<tr><td>7, 8                 </td><td>8                     </td><td>                      </td><td>                      </td></tr>
+	<tr><td>9                    </td><td>9                     </td><td>                      </td><td>                      </td></tr>
+	</tbody></table>
+
+</li></ol>
+
+
+
+
+
+
+<p>Each breakpoint, watchpoint, and catchpoint you set is assigned a number starting with 1.  You use this number to refer to
+that breakpoint.  To see the list of all breakpoints and watchpoints you've set, type <tt>info breakpoints</tt> (which can be
+abbreviated by <tt>i b</tt>.  I show a sample resulting output:</p>
+
+<pre class="demo">	(gdb) info breakpoints 
+	Num Type           Disp Enb Address    What
+	1   breakpoint     keep y   0x080483f6 in main at try5.c:4
+			  breakpoint already hit 1 time
+	2   breakpoint     keep n   0x0804841a in display at try5.c:14
+			  breakpoint already hit 1 time
+	3   hw watchpoint  keep y   i
+</pre>
+
+<p>According to the output, there are two breakpoints, one at line 4 and the other at line 14 of the source code.  They are
+assigned to numbers 1 and 2 respectively.  There is also a watchpoint set: the program will halt whenever the variable
+<tt>i</tt> (local to <tt>display()</tt>) changes value.</p>
+
+<p>In addition to being assigned a number, each breakpoint and watchpoint can be <i>enabled</i> or <i>disabled</i>.  A
+program's execution won't stop at a disabled breakpoint or watchpoint.  By default, when you create a new breakpoint or
+watchpoint, it's enabled.  To disable the breakpoint or watchpoint assigned to number <tt>n</tt>, type:</p>
+
+<pre class="demo">	disable n
+</pre>
+
+<p>To re-enable this breakpoint or watchpoint, type:</p>
+
+<pre class="demo">	enable n
+</pre>
+
+<p>If you look at the sample output of <tt>info breakpoints</tt> above, you'll see that breakpoint 2 has been disabled.</p>
+
+
+
+
+
+
+
+
+
+
+<br><br><a name="breaking"><h2>Breaking</h2></a>
+
+
+<pre class="demo">   $ gcc -c -g -W -Wall fgets.c main.c
+   $ gcc -o fgets fgets.o main.o
+</pre>
+
+<p>Note that the compiler generated a warning.  That's because we used <tt>-W -Wall</tt> which instructs gcc to tell us when it
+sees what it thinks might be a common programming error.  The best way to debug your program is to not put the bugs in the
+program to begin with.  You should <i>always</i> use these gcc bug finding options.  Let me be blunt here, and I hope I don't
+offend anyone.  It's stupid not to use <tt>-W -Wall</tt> when you compile code.  Plain and simple.  Stupid.  With a capital S.
+Most people don't use them, even people who are clearly better programmers than me.  That's because even smart people can do
+dumb things.  Don't you be dumb.  Always use <tt>-W -Wall</tt>.</p>
+
+<p>The program is a password guessing program.  Take a moment to look through the code to see how it works.  The program is
+ultra-simple so we can focus on learning GDB rather than trying to figure out complicated code like linked lists and whatnot.
+You should be able to deduce how the program works (and what the password is) in under a few seconds.  Now run the code and
+notice it simply doesn't work.  We'll first concentrate on learning how to set breakpoints, and then we'll debug the program.
+
+
+
+
+
+<a name="settingbasicbreakpoints"></a></p><h3><a name="settingbasicbreakpoints">Setting Basic Breakpoints</a></h3>
+
+<p>There are four major ways to set a breakpoint, in roughly the order that I personally use them.:</p>
+
+<ol>
+<li>By function name.</li>
+<li>By line number.</li>
+<li>By filename and line number.</li>
+<li>By address.</li>
+</ol>
+
+
+
+<a name="byfunctionname"><h4 style="margin-left: 2em; margin-top: 2em">By Function Name</h4></a>
+
+<p>We've already seen the most common way of setting a brekpoint: with the function name.</p>
+
+<pre class="demo">   $ gdb fgets
+   Using host libthread_db library "/lib/tls/libthread_db.so.1".
+   (gdb) break main
+   Breakpoint 1 at 0x8048464: file main.c, line 6.
+   (gdb)
+</pre>
+
+<p>The "<tt>break main</tt>" command sets a breakpoint at the top of <tt>main()</tt>, which happens to be line 6 of
+<b>main.c</b>.  If we now run the program, the program will stop at line 6.  Recall from the previous discussion that this means
+that GDB will be sitting between lines 5 and 6.  Line 6 will <i>not</i> have executed until we issue the <tt>step</tt>
+command:</p>
+
+<pre class="demo">   (gdb) run
+   Starting program: code/fgets/fgets 
+   
+   Breakpoint 1, main () at main.c:6
+   6               char *word = "password";
+   (gdb) 
+</pre>
+
+
+
+<a name="bylinenumber"><h4 style="margin-left: 2em; margin-top: 2em">By Line Number</h4></a>
+
+<p>A second way of setting breakpoints is with a line number.  The line number refers to the file GDB is currently in.  Right
+now, we're in <b>main.c</b>, so line numbers are with respect to that file for now.  Let's set a breakpoint at line 9, where the
+<tt>printf()</tt> statement is.</p>
+
+<pre class="demo">   (gdb) break 9
+   Breakpoint 2 at 0x804846b: file main.c, line 9.
+   (gdb)
+</pre>
+
+<p>GDB has a <tt>continue</tt> command which we haven't seen yet.  Once GDB pauses due to a breakpoint, the <tt>continue</tt>
+command will resume execution.  Use <tt>continue</tt> to make sure that GDB pauses at line 9:</p>
+
+<pre class="demo">   (gdb) continue
+   Continuing.
+   
+   Breakpoint 2, main () at main.c:9
+   9               printf("I'm thinking of a word.  Let's see if you can guess it.\n");
+   (gdb) 
+</pre>
+
+
+
+<a name="byfilenameandlinenumber"><h4 style="margin-left: 2em; margin-top: 2em">By Filename And Line Number</h4></a>
+
+<p>A third way of setting breakpoints is with a filename and line number, separated with a colon.  Let's set a breakpoint at
+line 10 of <b>fgets.c</b>:</p>
+
+<pre class="demo">   (gdb) break fgets.c:10
+   Breakpoint 3 at 0x80483fd: file fgets.c, line 10.
+   (gdb) 
+</pre>
+
+
+
+<a name="byaddress"><h4 style="margin-left: 2em; margin-top: 2em">By Address</h4></a>
+
+<p>A fourth way of setting breakpoints is with a memory address within the process's VM space.  I'll find the address of
+<tt>TakeGuess()</tt> and set a breakpoint at that address:</p>
+
+<pre class="demo">   (gdb) print TakeGuess 
+   $1 = {int (const char *)} 0x80483f4 &lt;TakeGuess&gt;
+   (gdb) break *0x80483f4
+   Breakpoint 4 at 0x80483f4: file fgets.c, line 7.
+</pre>
+
+
+
+<a name="breakpointnumbers"><h3>Breakpoint Numbers</h3></a>
+
+<p>You might have noticed that each breakpoint is given an integer identifier.  For example, we've set 4 breakpoints already,
+and the last one we set (by address) was assigned the number 4.  If you haven't noticed this, go back and take a look.  Various
+operations can be performed on a breakpoint, like removing them.  You can perform an operation on a particular breakpoint by
+referring to its integer identifier.</p>
+
+
+
+<a name="removingbreakpoints"><h3>Removing Breakpoints</h3></a>
+
+<p>Just as you can set breakpoints, you can also remove them.  There are numerous ways to remove a breakpoint:</p>
+
+<ul>
+<li>If you want to remove the breakpoint by its location, use <tt>clear</tt>.</li>
+<li>If you want to remove the breakpoint by its identifier, use <tt>delete</tt>.</li>
+</ul>
+
+<p>So let's use clear to remove the four breakpoints the way we set them; kind of like "undoing" what we did:</p>
+
+<pre class="demo">   (gdb) clear *0x80483f4
+   Deleted breakpoint 4 
+   (gdb) clear fgets.c:10
+   Deleted breakpoint 3 
+   (gdb) clear 9
+   Deleted breakpoint 2 
+   (gdb) clear main
+   Deleted breakpoint 1 
+   (gdb)
+</pre>
+
+<p>The <tt>delete</tt> command deletes breakpoints by identifier, as opposed to <tt>clear</tt> which removes breakpoints based
+on their location.  In fact, <tt>delete n</tt> deletes the breakpoint with identifier <tt>n</tt>.  We investigate this command
+more fully in the exercises.</p>
+
+<h4 class="exercise">Exercises</h4><ol class="exercise"><li>If you've been following along with the tutorial, you shouldn't have any breakpoints set since we deleted them all with
+	<tt>clear</tt>.  Set three breakpoints wherever you like by the methods of your choice.  Before you do, guess what their
+	identifiers will be.</li>
+<li>Use <tt>delete</tt>, not <tt>clear</tt>, to remove only the last breakpoint you set.  This will leave you with two remaining
+	breakpoints.</li>
+<li>You should have two breakpoints left.  <tt>delete</tt> with no arguments removes <i>all</i> breakpoints.  Try it out, then
+	quit GDB.</li>
+</ol>
+
+
+<a name="enabling,disabling,andignoring"><h3>Enabling, Disabling, And Ignoring</h3></a>
+
+<p>Once set, there are only two ways to get rid of a breakpoint: remove it or quit GDB.  GDB will continually break at the
+breakpoint.  However, you'll sometimes find it useful to temporarily disable a breakpoint, that is, you do <i>not</i> want GDB
+to break at the breakpoint, but you want to keep the breakpoint there in case you need to debug that section of code again.</p>
+
+<p>Breakpoints can be enabled and disabled.  Simply put, your program will pause at an enabled breakpoint, but it will not pause
+at a disabled breakpoint.</p>
+
+<p>You can enable or disable breakpoints using the <tt>enable</tt> and <tt>disable</tt> commands which take an argument of the
+breakpoint identifier for the breakpoint you want to enable or disable.  Let's take a look at this using the <b>fgets</b>
+program that we previously used.  Start a debugging session of <b>fgets</b> and place two breakpoints at lines 6, 9, and 12 of
+<b>main.c</b>:</p>
+
+<pre class="demo">   $ gdb fgets
+   (gdb) break 6
+   Breakpoint 1 at 0x8048464: file main.c, line 6.
+   (gdb) break 9
+   Breakpoint 2 at 0x804846b: file main.c, line 9.
+   (gdb) break 12
+   Breakpoint 3 at 0x8048477: file main.c, line 12.
+</pre>
+
+<p>Disable breakpoint 2, run the program, and use <tt>continue</tt> to verify that breakpoint 2 does not pause execution.</p>
+
+<pre class="demo">   (gdb) disable 2
+   (gdb) run
+   Starting program: code/fgets/fgets 
+   
+   Breakpoint 1, main () at main.c:6
+   6               char *word = "password";
+   (gdb) continue 
+   Continuing.
+   I'm thinking of a word.  Let's see if you can guess it.
+   
+   Breakpoint 3, main () at main.c:12
+   12              while ( KeepGoing )
+</pre>
+
+<p>Confirmed, breakpoint 2 is disabled.  Finally, enable breakpoint 2 and rerun the program.  Use <tt>continue</tt> to verify
+that breakpoint 2 now pauses execution:</p>
+
+<pre class="demo">   (gdb) enable 2
+   (gdb) run
+   The program being debugged has been started already.
+   Start it from the beginning? (y or n) y
+   
+   Starting program: /www/p/linux/gdb/code/fgets/fgets 
+   
+   Breakpoint 1, main () at main.c:6
+   6               char *word = "password";
+   (gdb) continue 
+   Continuing.
+   
+   Breakpoint 2, main () at main.c:9
+   9               printf("I'm thinking of a word.  Let's see if you can guess it.\n");
+</pre>
+
+<p>Confirmed, once enabled, breakpoint 2 again pauses execution.</p>
+
+<h4 class="exercise">Exercises</h4><ol class="exercise"><li>The <tt>disable</tt> command permanently disabled a breakpoint until you explicitly enable it with <tt>enable</tt>.
+	However, it's possible to temporarily disable a breakpoint.  Use GDB's help utility to read about the <tt>ignore</tt>
+	command, which disables a breakpoint "for n crossings".</li>
+<li>Personally, I don't use ignore a whole lot.  It seems like conditional breaking makes <tt>ignore</tt> not very useful, but
+	you should still know of its existence.  Hopefully you have GDB still open.  Use <tt>ignore</tt> to disable breakpoint 3
+	(the one at line 12) for 3 crossings.  Verify that it works.</li>
+</ol>
+
+
+
+
+<a name="listingbreakpoints"><h3>Listing Breakpoints</h3></a>
+
+<p>So far, we've seen three commands that take a breakpoint's identifier as an argument: <tt>delete</tt>, <tt>enable</tt>, and
+<tt>disable</tt>.  There are many others, which we'll cover later.  The point is, breakpoint identifiers are useful, and you'll
+find yourself using them quite a bit.  But how do you remember the identifiers for your breakpoints, or even where your
+breakpoints were set to begin with?  There's a command, <tt>info breakpoints</tt> which lists all your breakpoints, their
+identifiers, and lots more information.  Hopefully, GDB is still open from the previous subsection, so check it out:</p>
+
+<pre class="demo">   (gdb) info breakpoints 
+   Num Type           Disp Enb Address    What
+   1   breakpoint     keep y   0x08048464 in main at main.c:6
+           breakpoint already hit 1 time
+   2   breakpoint     keep y   0x0804846b in main at main.c:9
+           breakpoint already hit 1 time
+   3   breakpoint     keep y   0x08048477 in main at main.c:12
+</pre>
+
+<p>This is a very important command, and I find myself using it all the time.  It should be completely self explanatory except
+for a couple of things:</p>
+
+<ol>
+<li>The <tt>Num</tt> field gives the identifier.</li>
+<li>The <tt>Type</tt> field gives the type of breakpoint.  There are different types of breakpoints, like hardware watchpoints,
+	which we'll cover shortly.</li>
+<li>The <tt>Disp</tt> field (short for disposition) describes what will happen to the breakpoint the next time it's activated
+	(the next time it pauses execution).  <tt>keep</tt> indicates nothing will happen to the breakpoint, however, it's possible
+	to disable or even remove a breakpoint the next time it's reached.  These situations are identified by the <tt>Disp</tt>
+	field.</li>
+</ol>
+
+
+
+
+<p>&nbsp;</p><br><hr><table width="100%"><tbody><tr><td width="33%" align="left"><img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/prev.png" alt="back"> &nbsp; Back: <a href="http://www.dirac.org/linux/gdb/03-Initialization,_Listing,_And_Running.php">Initialization, Listing, And Running</a></td><td align="left"><img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/up.png" alt="up">   &nbsp;<a href="http://www.dirac.org/linux/gdb">Up</a> to the TOC</td><td align="right">Next: <a href="http://www.dirac.org/linux/gdb/05-Stepping_And_Resuming.php">Stepping And Resuming</a> &nbsp; <img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/next.png" alt="next"></td></tr><tr><td></td><td align="left"><img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/email.png" alt="email"> &nbsp;<a href="mailto:p@dirac.org">Email</a> comments and corrections<br></td></tr><tr><td></td><td align="left"><img src="./Peter's gdb Tutorial  Breakpoints And Watchpoints_files/printable.png" alt="printable"> &nbsp;<a href="http://www.dirac.org/linux/gdb/04-Breakpoints_And_Watchpoints.php?printable=yes">Printable</a> version</td><td></td></tr></tbody></table>
+	<br>
+	
+	</body></html>
