@@ -1,0 +1,10 @@
+
+level2.o:     file format elf32-i386
+
+
+Disassembly of section .text:
+
+00000000 <.text>:
+   0:	b8 24 b3 04 08       	mov    $0x804b324,%eax
+   5:	c7 00 05 3b 3e 11    	movl   $0x113e3b05,(%eax)
+   b:	c3                   	ret    
