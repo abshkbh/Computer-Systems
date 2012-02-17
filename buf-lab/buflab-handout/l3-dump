@@ -1,0 +1,10 @@
+
+level3.o:     file format elf32-i386
+
+
+Disassembly of section .text:
+
+00000000 <.text>:
+   0:	bd 50 32 68 55       	mov    $0x55683250,%ebp
+   5:	b8 05 3b 3e 11       	mov    $0x113e3b05,%eax
+   a:	c3                   	ret    
