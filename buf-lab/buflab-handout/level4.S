@@ -1,6 +1,4 @@
 .align 4
-movl %ebp,%esp
-popl %ebp
+leal 0x18(%esp),%ebp
 movl $0x113e3b05,%eax
 ret
- 
