@@ -1,0 +1,52 @@
+***********
+1. Overview
+***********
+
+In part (a) of this lab, you need to implement a cache simulator in cachesim.c. 
+It needs to be able to read traces produced by valgrind and simulate a cache and
+output the number of cache hits, misses and evictions. 
+
+In part (b) of this lab, you need to write a function in trans.c that computes
+the transpose of a given matrix. Your goal is to minimize the number of cache
+misses with this function. 
+
+Please see the writeup for more detailed instructions.
+
+*************************
+2. Valgrind trace format
+*************************
+Valgrind trace format looks like this:
+
+ S 00600a8c,4
+I  00400573,4
+ M 7ff000388,4
+I  00400577,4
+ L 7ff000388,4
+
+Some sample traces are given in the folder traces/
+
+The format starts with a character indicating the operation, where: 
+S stands for data store
+L stands for data load
+M stands for data modify
+I stands for instuction load
+
+The operation character is followed by a memory address in HEX and a request
+size.
+
+In this lab, you should ignore I-cache accesses (Ignore lines that start with
+I). You should assume that the memory accesses are properly aligned, such that no
+sinlge memory access requires accessing two blocks. (Hence, you may ignore the
+request sizes.) 
+
+********
+3. Files
+********
+Makefile            - used by 'make' to compile the source code
+cachelab-tools.h    - useful utilities for this lab
+cachelab-tools.c    - useful utilities for this lab
+cachesim.c          - the cache simulator the student should write
+trans.c             - student write transpose functions in this file
+test.c              - the test program that evaluates the student's work
+tracegen.c          - used by the driver to obtain memory traces
+driver.py        - wrapper. runs driver 3 times and prints results
