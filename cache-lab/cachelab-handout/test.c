@@ -1,22 +1,23 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
-
+#include <stdlib.h>
 static int verbose ;   //For verbose argument
 
 int main(int argc,char **argv) {
 
 
-int b,s,E ;
+int b,s,E,optchar ;
 char *t = NULL;
 
 if (argc < 5) {
   printf("Too few arguments \n");
   exit(0);
-}
+} 
 
 
-while ((optchar = getopt (argc,argv,"b:s:E:tv::"))!= -1) {
+
+while ((optchar = getopt (argc,argv,"b:s:E:t:v::"))!= -1) {
 
   switch (optchar) {
 
@@ -24,6 +25,7 @@ while ((optchar = getopt (argc,argv,"b:s:E:tv::"))!= -1) {
     case 'b' : b = atoi(optarg);
                break;
     case 't' : t = (char *)(optarg);
+               printf("Input string %s \n",(char *)(optarg));
                break;
     case 'E' : E = atoi(optarg);
                break;
@@ -31,16 +33,15 @@ while ((optchar = getopt (argc,argv,"b:s:E:tv::"))!= -1) {
                break;
     case 'v' : verbose = 1;
                break;
-    default :  printf("Wrong argument usage\n")
+    default :  printf("Wrong argument usage\n");
                printf("%s [-b] block-bits [-s] set-bits [-t] input-file [-E] lines per set [[-v] optional] verbose\n",argv[0]);
                exit(0);
 
   }
 
 
-printf("\n Arguments were %d %d %d %s %d",b,s,E,t,verbose);
-
 }
 
+printf("\n Arguments were %d %d %d %s %d",b,s,E,t,verbose);
 
 }
