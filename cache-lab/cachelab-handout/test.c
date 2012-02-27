@@ -1,3 +1,11 @@
+#define DEBUG
+#ifdef DEBUG
+#define dbg_printf(...) printf(__VA_ARGS__)
+#else
+#define dbg_printf(...)
+#endif
+
+
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -7,8 +15,15 @@ static int verbose ;   //For verbose argument
 int main(int argc,char **argv) {
 
 
-int b,s,E,optchar ;
+int b,s,B,S,E,optchar ;
+int total_cache_size = 0;
+char parse_line[100]; //line to parse
+char instruction;
+unsigned long int address;  // address parsed 
+int size;  //size ofoperation
+FILE *fp;
 char *t = NULL;
+char str[1];
 
 if (argc < 5) {
   printf("Too few arguments \n");
@@ -25,7 +40,7 @@ while ((optchar = getopt (argc,argv,"b:s:E:t:v::"))!= -1) {
     case 'b' : b = atoi(optarg);
                break;
     case 't' : t = (char *)(optarg);
-               printf("Input string %s \n",(char *)(optarg));
+               fp = fopen(t,"r");
                break;
     case 'E' : E = atoi(optarg);
                break;
@@ -42,6 +57,25 @@ while ((optchar = getopt (argc,argv,"b:s:E:t:v::"))!= -1) {
 
 }
 
-printf("\n Arguments were %d %d %d %s %d",b,s,E,t,verbose);
+printf("Arguments were %d %d %d %s %d\n",b,s,E,t,verbose);
+
+////////////////////////////////////////////////////////
+// Initialize cache and cache parameters
+
+S = (1<<s);  // S = 2^s
+B = (1<<b); //  B = 2^b
+total_cache_size = S*E*B ;
+
+////////////////////////////////////////////////////////
+
+while(fgets(parse_line,100,fp)!= NULL) {
+
+  dbg_printf("%s\n",parse_line);
+  instruction = parse_line[1];
+  sscanf(parse_line,"%s%lx%c%d",str,&address,str,&size);
+  dbg_printf("%c %lu,%d\n",instruction,address,size);
+}
+
+fclose(fp);
 
 }
