@@ -70,7 +70,7 @@ def main():
 
   andrewid = os.environ['USER']
 
-  url='"http://unofficial.fish.ics.cs.cmu.edu/unofficialSubmit.rb?course=15213-f11&user=%s&assessment=cachelab&result=%s"' % (andrewid, autoresult)
+  url='"http://unofficial.fish.ics.cs.cmu.edu/unofficialSubmit.rb?course=15213-s12&user=%s&assessment=cachelab&result=%s"' % (andrewid, autoresult)
   
   if len(sys.argv) == 1:
     print "Posting unofficial score (%s) to Autolab:" % andrewid
