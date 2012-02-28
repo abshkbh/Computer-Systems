@@ -1,11 +1,11 @@
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 #define dbg_printf(...) printf(__VA_ARGS__)
 #else
 #define dbg_printf(...)
 #endif
 
-#define COLD_CACHE_VALUE (~0)
+#define COLD_CACHE_VALUE ~0LU
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
