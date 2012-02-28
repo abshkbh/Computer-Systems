@@ -1,4 +1,7 @@
-#define MY_DEBUG
+/* AndrewId : abhisheb Name : Abhishek Bhardwaj Cache-Lab Part (a) */
+
+
+//#define MY_DEBUG
 #ifdef MY_DEBUG
 #define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -12,17 +15,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cachelab-tools.h"
+
 static int verbose ;   //For verbose argument
 static int b,s,tag_bits,B,S,E ;
-static unsigned long int global_reference_counter;
+static unsigned int global_reference_counter;
 unsigned int set,tag,byte;
 const unsigned long int mask = (~0);
-static unsigned int  misses = 0;
-static unsigned int hits = 0;
-static unsigned int evictions = 0;
+static int  misses = 0;
+static int hits = 0;
+static int evictions = 0;
 unsigned long int **cache;
 unsigned long int **reference_counter;   //To keep track of cache references and implement LRU 
 
+int is_in_cache(unsigned int set,unsigned int tag);      //1 if in cache increments its ref counter  0 if not given set tag
+int check_cold_cache(unsigned int set);          //Check if any line in particular set is cold, return line  else return -1
 int check_cache(unsigned int set,unsigned int tag);
 void insert_in_cache(unsigned int set,unsigned int line,unsigned int tag);       //1 if in cache 0 if not
 void initialize_cache();
@@ -31,8 +37,6 @@ void initialize_reference_counter();
 void show_reference_counter();
 void increment_reference_counter(unsigned int set,unsigned int line);
 unsigned int line_to_evict(unsigned int set) ; //Returns line to evict from set
-void load_action(unsigned int tag,unsigned int set);
-void store_action(unsigned int tag,unsigned int set);
 
 int main(int argc,char **argv) {
 
@@ -47,7 +51,8 @@ int main(int argc,char **argv) {
 	char *t = NULL;
 	char str[1];  //Dummy char for parsing
 	int i;
-        
+	int status;
+	unsigned int evicted_line;
 	if (argc < 5) {
 		printf("Too few arguments \n");
 		exit(0);
@@ -63,7 +68,7 @@ int main(int argc,char **argv) {
 			case 'b' : b = atoi(optarg);
 				   break;
 			case 't' : t = (char *)(optarg);
-                                   fp = fopen(t,"r");
+				   fp = fopen(t,"r");
 				   break;
 			case 'E' : E = atoi(optarg);
 				   break;
@@ -98,17 +103,17 @@ int main(int argc,char **argv) {
 
 	}
 
-        initialize_cache();
+	initialize_cache();
 
 	reference_counter = (unsigned long int **)malloc(S *sizeof(unsigned long int *));
 
 	for(i = 0 ; i < S ; i++ ) {
 
-	reference_counter[i] = (unsigned long int *)malloc(E* sizeof(unsigned long int)); //Should be B*E but B doesnt matter in lab , so B = 8 bytes
+		reference_counter[i] = (unsigned long int *)malloc(E* sizeof(unsigned long int)); //Should be B*E but B doesnt matter in lab , so B = 8 bytes
 
 	}
 
-       initialize_reference_counter();
+	initialize_reference_counter();
 
 
 	////////////////////////////////////////////////////////
@@ -126,38 +131,119 @@ int main(int argc,char **argv) {
 
 
 		if(instruction == 'I') {
+
+
 			dbg_printf("I = %lx %x %x %x\n",address,tag,set,byte); 
 
-		}
 
+		}
 		if(instruction == 'L') {
 
 			dbg_printf("L = %lx %x %x %x\n",address,tag,set,byte); 
-                        load_action(tag,set);
+		
+                  	if (is_in_cache(set,tag)) {
+				hits++;
+				printf("\nHIT");
+			} 
+
+		       else if((status = check_cold_cache(set))!= -1) {   //If cache is cold
+				misses ++;
+				insert_in_cache(set,status,tag);
+				increment_reference_counter(set,status); 
+				printf("\nMISS");
+
+			} 
+
+			else if (!is_in_cache(set,tag)) {
+				evicted_line = line_to_evict(set);
+				evictions ++;
+				misses++;
+				insert_in_cache(set,evicted_line,tag);
+				increment_reference_counter(set,evicted_line);
+				printf("\nMISS + EVICTION");
+			}
 
 		}
 
 		if(instruction == 'S') {
 
+
 			dbg_printf("S = %lx %x %x %x\n",address,tag,set,byte); 
-                        store_action(tag,set);
+
+			if (is_in_cache(set,tag)) {
+				hits++;
+				printf("\nHIT");
+			} 
+
+			else if((status = check_cold_cache(set))!= -1) {   //If cache is cold
+				misses ++;
+				insert_in_cache(set,status,tag);
+				increment_reference_counter(set,status); 
+				printf("\nMISS");
+
+			} 
+
+			else if (!is_in_cache(set,tag)) {
+				evicted_line = line_to_evict(set);
+				evictions ++;
+				misses++;
+				insert_in_cache(set,evicted_line,tag);
+				increment_reference_counter(set,evicted_line);
+				printf("\nMISS + EVICTION");
+			}
+
+
 
 		}
 
 		if(instruction == 'M') {
+
+
 			dbg_printf("M = %lx %x %x %x\n",address,tag,set,byte); 
-                        load_action(tag,set);
-                        store_action(tag,set);
+			///////////For load ///////////////////////////////////////////
+
+			for ( i = 0 ; i < 2 ; i++) {
+				if (is_in_cache(set,tag)) {
+					hits++;
+					printf("\nHIT");
+				} 
+
+				else if((status = check_cold_cache(set))!= -1) {   //If cache is cold
+					misses ++;
+					insert_in_cache(set,status,tag);
+					increment_reference_counter(set,status); 
+					printf("\nMISS");
+
+				} 
+
+				else if (!is_in_cache(set,tag)) {
+					evicted_line = line_to_evict(set);
+					evictions ++;
+					misses++;
+					insert_in_cache(set,evicted_line,tag);
+					increment_reference_counter(set,evicted_line);
+					printf("\nMISS + EVICTION");
+				}
+
+
+
+
+
+			}
+
+
+
 
 		}
 
+
 		show_cache();
 		show_reference_counter();
-                dbg_printf("\nHits = %u Misses = %u Evicitions = %u\n",hits,misses,evictions);
+		dbg_printf("\nHits = %d Misses = %d Evicitions = %d\n",hits,misses,evictions);
+		printCachesimResults(hits,misses,evictions);
 
 	}
 
-        printCachesimResults(hits,misses,evictions);
 	fclose(fp);
 
 }
@@ -230,9 +316,9 @@ void show_cache() {
 	int i,j;
 	unsigned long int *temp;
 
-        dbg_printf("\n\\\\\\\\\\Cache\\\\\\\\\\\\\\");
-	
-         for(i = 0 ; i < S ; i++) {
+	dbg_printf("\n\\\\\\\\\\Cache\\\\\\\\\\\\\\");
+
+	for(i = 0 ; i < S ; i++) {
 
 		temp = (unsigned long int *)cache[i];
 		dbg_printf("\n");
@@ -252,7 +338,7 @@ void show_reference_counter() {
 	int i,j;
 	unsigned long int *temp;
 
-        dbg_printf("\n\\\\\\\\\\Reference Counter\\\\\\\\\\\\\\");
+	dbg_printf("\n\\\\\\\\\\Reference Counter\\\\\\\\\\\\\\");
 	for(i = 0 ; i < S ; i++) {
 
 		temp = (unsigned long int *)reference_counter[i];
@@ -358,67 +444,5 @@ unsigned int line_to_evict(unsigned int set) {    //Returns line to evict from s
 
 
 	return line;
-
-}
-
-
-
-void load_action(unsigned int tag,unsigned int set) {
-
-int status;
-unsigned int evicted_line;
-
-	if((status = check_cold_cache(set))!= -1) {   //If cache is cold
-		misses ++;
-		insert_in_cache(set,status,tag);
-		increment_reference_counter(set,status); 
-		dbg_printf("\nMISS");
-
-	} 
-
-	else if (is_in_cache(set,tag)) {
-		hits++;
-		dbg_printf("\nHIT");
-	} 
-
-	else if (!is_in_cache(set,tag)) {
-		evicted_line = line_to_evict(set);
-		evictions ++;
-		misses++;
-		insert_in_cache(set,evicted_line,tag);
-		increment_reference_counter(set,evicted_line);
-		dbg_printf("\nMISS + EVICTION");
-	}
-
-}
-
-
-
-void store_action(unsigned int tag,unsigned int set) {
-
-int status;
-unsigned int evicted_line;
-
-	if((status = check_cold_cache(set))!= -1) {   //If cache is cold
-		misses ++;
-		insert_in_cache(set,status,tag);
-		increment_reference_counter(set,status); 
-		dbg_printf("\nMISS");
-
-	} 
-
-	else if (is_in_cache(set,tag)) {
-		hits++;
-		dbg_printf("\nHIT");
-	} 
-
-	else if (!is_in_cache(set,tag)) {
-		evicted_line = line_to_evict(set);
-		evictions ++;
-		misses++;
-		insert_in_cache(set,evicted_line,tag);
-		increment_reference_counter(set,evicted_line);
-		dbg_printf("\nMISS + EVICTION");
-	}
 
 }

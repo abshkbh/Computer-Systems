@@ -66,7 +66,8 @@ char transpose_submit_desc[] = "Part (b) Submit";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
     REQUIRES(M > 0);
     REQUIRES(N > 0);
-
+ 
+     A = B ; // To override compiler warning for now
     ENSURES(is_transpose(M, N, A, B));
 }
 
