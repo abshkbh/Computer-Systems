@@ -67,28 +67,48 @@ char transpose_submit_desc[] = "Part (b) Submit";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 	REQUIRES(M > 0);
 	REQUIRES(N > 0);
-	int i,j,k,l,temp;
-	int block_size = 8;   
- //  printf("\nAddress of A = %p and Address of B = %p",(void *)A ,(void *) B);    
-     
-      if (( M == 32 ) || (M == 64)) {   
-
-          if(M==32)
-             block_size = 8;
-          else
-             block_size = 4;
-
-	for( i = 0 ; i <N ;i += block_size) {
-
-		for( j = 0 ; j< M ; j += block_size ) {
+	int i,j,k,l;
+	int temp;
+	int diagonal_case;
+	int diagonal_case_index = 0;
+	int multiple_four_case;
+        int multiple_four_case_index = 0;
+        int block_size = 4;   
+	int flag = 0;
+        int flag2 = 0;
 
 
-			for(k = i ; k < i + block_size ; k++) {
+	if(M==32) {
 
-				for(l = j ; l < j + block_size ; l ++) {
+		block_size = 8;
 
-					temp = A[k][l];
-					B[l][k] = temp;
+		for( i = 0 ; i < M ;i += block_size) {
+
+			for( j = 0 ; j < N; j += block_size ) {
+
+
+				for(k = i ; k < i + block_size ; k++) {
+
+					flag = 0;
+					for(l = j ; l < j + block_size ; l ++) {
+
+						if ((k==l)) {
+							diagonal_case = A[k][l]; 
+							diagonal_case_index = k;
+							flag = 1;
+						}
+
+						else {
+							temp = A[k][l];
+							B[l][k] = temp;
+						}
+					}
+
+					if (flag) {
+
+						B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+					}
 
 
 				}
@@ -99,24 +119,77 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 
 	}
 
-       }
+else if (M == 64) {
 
-      else {
+	block_size = 4;
 
-        for(i = 0 ; i < N ; i++) {
+	for( j = 0 ; j < N ;j += block_size) {
 
-         for(j = 0 ; j < M ; j++) { 
-                temp = A[i][j];
-                B[j][i] = temp;
-            
-                  }
+		for( i = 0 ; i< M ; i += block_size ) {
+
+
+			for(k = i ; k < i + block_size ; k++) {
+
+				flag = 0;
+                                flag2 = 0;
+				for(l = j ; l < j + block_size ; l ++) {
+
+					if ((k==l)) {
+						diagonal_case = A[k][l]; 
+						diagonal_case_index = k;
+						flag = 1;
+					}
+
+				else if (((k%4) == 0)&&(l==0)) {
+						multiple_four_case = A[k][l]; 
+						multiple_four_case_index = k;
+						flag2 = 1;
+					} 
+
+					else {
+						temp = A[k][l];
+						B[l][k] = temp;
+					}
+				}
+
+				if (flag) {
+
+					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+				}
+				if (flag2) {
+
+					B[0][multiple_four_case_index] = multiple_four_case;
+
+				}
+
+
+			}
+
+		}
+
+	}
 
 }
-           
 
-                 }
 
-	ENSURES(is_transpose(M, N, A, B));
+else {
+
+	for(i = 0 ; i < N ; i++) {
+
+		for(j = 0 ; j < M ; j++) { 
+			temp = A[i][j];
+			B[j][i] = temp;
+
+		}
+
+	}
+
+}
+
+ENSURES(is_transpose(M, N, A, B));
+
+
 }
 
 ////////////// Declare and test your own transpose functions here////////
@@ -137,10 +210,10 @@ void trans_1(int M, int N, int A[N][M], int B[M][N]){
 	REQUIRES(N > 0);
 	int i,j,k,l;
 	int temp;
-        int diagonal_case;
-        int diagonal_case_index = 0;
-        int block_size = 4;   
-        int flag = 0;
+	int diagonal_case;
+	int diagonal_case_index = 0;
+	int block_size = 4;   
+	int flag = 0;
 
 
 	if (( M == 32 ) || (M == 64)) {   
@@ -148,7 +221,7 @@ void trans_1(int M, int N, int A[N][M], int B[M][N]){
 		if(M==32)
 			block_size = 8;
 		else
-			block_size = 8;
+			block_size = 4;
 
 		for( i = 0 ; i <N ;i += block_size) {
 
@@ -157,29 +230,29 @@ void trans_1(int M, int N, int A[N][M], int B[M][N]){
 
 				for(k = i ; k < i + block_size ; k++) {
 
-                                        flag = 0;
+					flag = 0;
 					for(l = j ; l < j + block_size ; l ++) {
- 
-                                             if ((k==l)) {
-                                               diagonal_case = A[k][l]; 
-                                               diagonal_case_index = k;
-                                                flag = 1;
-                                                  }
 
-                                              else {
-						temp = A[k][l];
-						B[l][k] = temp;
-                                               }
+						if ((k==l)) {
+							diagonal_case = A[k][l]; 
+							diagonal_case_index = k;
+							flag = 1;
+						}
+
+						else {
+							temp = A[k][l];
+							B[l][k] = temp;
+						}
 					}
 
-                                         if (flag) {
-                                          
-                                         B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+					if (flag) {
 
-                                           }
-				   
+						B[diagonal_case_index][diagonal_case_index] = diagonal_case;
 
-                                  }
+					}
+
+
+				}
 
 			}
 
