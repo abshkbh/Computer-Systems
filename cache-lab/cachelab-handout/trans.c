@@ -76,7 +76,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
         int block_size = 4;   
 	int flag = 0;
         int flag2 = 0;
-
+        int flag3 = 0;
 
 	if(M==32) {
 
@@ -132,6 +132,7 @@ else if (M == 64) {
 
 				flag = 0;
                                 flag2 = 0;
+			        flag3 = 0;
 				for(l = j ; l < j + block_size ; l ++) {
 
 					if ((k==l)) {
@@ -146,6 +147,14 @@ else if (M == 64) {
 						flag2 = 1;
 					} 
 
+                           	else if (((l%4) == 0)&&(k==0)) {
+						multiple_four_case = A[k][l]; 
+						multiple_four_case_index = l;
+						flag3 = 1;
+					} 
+
+
+
 					else {
 						temp = A[k][l];
 						B[l][k] = temp;
@@ -157,9 +166,15 @@ else if (M == 64) {
 					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
 
 				}
-				if (flag2) {
+			   else	if (flag2) {
 
 					B[0][multiple_four_case_index] = multiple_four_case;
+
+				}
+
+                         else if (flag3) {
+
+					B[multiple_four_case_index][0] = multiple_four_case;
 
 				}
 
