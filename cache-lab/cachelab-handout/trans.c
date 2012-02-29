@@ -41,17 +41,18 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]){
 // A simple transpose function; not optimized for cache
 char trans_desc[] = "Simple row-wise scan transpose";
 void trans(int M, int N, int A[N][M], int B[M][N]){
-    int i, j, tmp;
+//    int i, j, tmp;
 
     REQUIRES(M > 0);
     REQUIRES(N > 0);
 
-    for (i = 0; i < N; i++){
+    A = B;
+/*    for (i = 0; i < N; i++){
         for (j = 0; j < M; j++){
             tmp = A[i][j];
             B[j][i] = tmp;
         }
-    }    
+      } */    
 
     ENSURES(is_transpose(M, N, A, B));
 }
@@ -64,11 +65,58 @@ void trans(int M, int N, int A[N][M], int B[M][N]){
 // Please do not change this description
 char transpose_submit_desc[] = "Part (b) Submit";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
-    REQUIRES(M > 0);
-    REQUIRES(N > 0);
- 
-     A = B ; // To override compiler warning for now
-    ENSURES(is_transpose(M, N, A, B));
+	REQUIRES(M > 0);
+	REQUIRES(N > 0);
+	int i,j,k,l,temp;
+	int block_size = 8;   
+ //  printf("\nAddress of A = %p and Address of B = %p",(void *)A ,(void *) B);    
+     
+      if (( M == 32 ) || (M == 64)) {   
+
+          if(M==32)
+             block_size = 8;
+          else
+             block_size = 4;
+
+	for( i = 0 ; i <N ;i += block_size) {
+
+		for( j = 0 ; j< M ; j += block_size ) {
+
+
+			for(k = i ; k < i + block_size ; k++) {
+
+				for(l = j ; l < j + block_size ; l ++) {
+
+					temp = A[k][l];
+					B[l][k] = temp;
+
+
+				}
+
+			}
+
+		}
+
+	}
+
+       }
+
+      else {
+
+        for(i = 0 ; i < N ; i++) {
+
+         for(j = 0 ; j < M ; j++) { 
+                temp = A[i][j];
+                B[j][i] = temp;
+            
+                  }
+
+}
+           
+
+                 }
+
+	ENSURES(is_transpose(M, N, A, B));
 }
 
 ////////////// Declare and test your own transpose functions here////////
@@ -83,7 +131,80 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 //
 
 
+char trans_1_desc[] = "Part (b) 1st try";
+void trans_1(int M, int N, int A[N][M], int B[M][N]){
+	REQUIRES(M > 0);
+	REQUIRES(N > 0);
+	int i,j,k,l;
+	int temp;
+        int diagonal_case;
+        int diagonal_case_index = 0;
+        int block_size = 4;   
+        int flag = 0;
 
+
+	if (( M == 32 ) || (M == 64)) {   
+
+		if(M==32)
+			block_size = 8;
+		else
+			block_size = 8;
+
+		for( i = 0 ; i <N ;i += block_size) {
+
+			for( j = 0 ; j< M ; j += block_size ) {
+
+
+				for(k = i ; k < i + block_size ; k++) {
+
+                                        flag = 0;
+					for(l = j ; l < j + block_size ; l ++) {
+ 
+                                             if ((k==l)) {
+                                               diagonal_case = A[k][l]; 
+                                               diagonal_case_index = k;
+                                                flag = 1;
+                                                  }
+
+                                              else {
+						temp = A[k][l];
+						B[l][k] = temp;
+                                               }
+					}
+
+                                         if (flag) {
+                                          
+                                         B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+                                           }
+				   
+
+                                  }
+
+			}
+
+		}
+
+
+
+	}
+
+	else {
+
+		for(i = 0 ; i < N ; i++) {
+
+			for(j = 0 ; j < M ; j++) { 
+				temp = A[i][j];
+				B[j][i] = temp;
+
+			}
+
+		}
+
+
+	}
+	ENSURES(is_transpose(M, N, A, B));
+}
 
 
 
@@ -93,14 +214,15 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 // This function registers all the transpose functions you define
 // with the driver
 void registerFunctions(){
-    // Format:
-    // registerTransFunction( function_name, function_description );
-    registerTransFunction( doNothing, doNothing_desc);
-    registerTransFunction( trans, trans_desc);
-    registerTransFunction( transpose_submit, transpose_submit_desc);
+	// Format:
+	// registerTransFunction( function_name, function_description );
+	registerTransFunction( doNothing, doNothing_desc);
+	registerTransFunction( trans, trans_desc);
+	registerTransFunction( transpose_submit, transpose_submit_desc);
+	registerTransFunction( trans_1, trans_1_desc);
 
-    //Following the above two examples, please register the transpose functions
-    //you you want to test.
+	//Following the above two examples, please register the transpose functions
+	//you you want to test.
 }
 
 
