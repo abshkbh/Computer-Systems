@@ -67,17 +67,19 @@ char transpose_submit_desc[] = "Part (b) Submit";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 	REQUIRES(M > 0);
 	REQUIRES(N > 0);
-	int i,j,k,l;
+	int i,j,k,l,x_index,y_index;
 	int temp;
 	int diagonal_case;
 	int diagonal_case_index = 0;
-	int multiple_four_case;
-        int multiple_four_case_index = 0;
+//	int multiple_four_case;
+//        int multiple_four_case_index = 0;
         int block_size = 4;   
-	int flag = 0;
-        int flag2 = 0;
-        int flag3 = 0;
-
+	int big_block_size = 8;
+        int flag = 0;
+  //      int flag2 = 0;
+  //      int flag3 = 0;
+       
+        
 	if(M==32) {
 
 		block_size = 8;
@@ -122,8 +124,136 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]){
 else if (M == 64) {
 
 	block_size = 4;
+        big_block_size = 8;
 
-	for( j = 0 ; j < N ;j += block_size) {
+	for( i = 0 ; i < M ;i += big_block_size) {
+
+		for( j = 0 ; j < N ; j += big_block_size ) {
+
+
+                          x_index = i + (M/16); 
+                          y_index = j; 
+
+
+			for(k = x_index ; k < x_index + block_size ; k++) {
+
+				flag = 0;
+				for(l = y_index ; l < y_index + block_size ; l ++) {
+
+					if ((k==l)) {
+						diagonal_case = A[k][l]; 
+						diagonal_case_index = k;
+						flag = 1;
+					}
+
+					else {
+						temp = A[k][l];
+						B[l][k] = temp;
+					}
+				}
+
+				if (flag) {
+
+					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+				}
+
+			}
+
+
+                          x_index = i; 
+                          y_index = j; 
+
+			for(k = x_index ; k < x_index + block_size ; k++) {
+
+				flag = 0;
+				for(l = y_index ; l < y_index + block_size ; l ++) {
+
+					if ((k==l)) {
+						diagonal_case = A[k][l]; 
+						diagonal_case_index = k;
+						flag = 1;
+					}
+
+					else {
+						temp = A[k][l];
+						B[l][k] = temp;
+					}
+				}
+
+				if (flag) {
+
+					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+				}
+
+			}
+
+                          x_index = i; 
+                          y_index = j + (N/16); 
+
+			for(k = x_index ; k < x_index + block_size ; k++) {
+
+				flag = 0;
+				for(l = y_index ; l < y_index + block_size ; l ++) {
+
+					if ((k==l)) {
+						diagonal_case = A[k][l]; 
+						diagonal_case_index = k;
+						flag = 1;
+					}
+
+					else {
+						temp = A[k][l];
+						B[l][k] = temp;
+					}
+				}
+
+				if (flag) {
+
+					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+				}
+
+			}
+
+
+                          x_index = i + (N/16); 
+                          y_index = j + (N/16); 
+
+			for(k = x_index ; k < x_index + block_size ; k++) {
+
+				flag = 0;
+				for(l = y_index ; l < y_index + block_size ; l ++) {
+
+					if ((k==l)) {
+						diagonal_case = A[k][l]; 
+						diagonal_case_index = k;
+						flag = 1;
+					}
+
+					else {
+						temp = A[k][l];
+						B[l][k] = temp;
+					}
+				}
+
+				if (flag) {
+
+					B[diagonal_case_index][diagonal_case_index] = diagonal_case;
+
+				}
+
+			}
+
+
+	}
+
+
+}
+
+
+ /*	for( j = 0 ; j < N ;j += block_size) {
 
 		for( i = 0 ; i< M ; i += block_size ) {
 
@@ -183,25 +313,68 @@ else if (M == 64) {
 
 		}
 
-	}
+	}     */
 
 }
 
 
 else {
+	block_size = 16;
+ 
+	for( i = 0 ; i < 48 ;i += block_size) {
 
-	for(i = 0 ; i < N ; i++) {
+		for( j = 0 ; j < 48 ; j += block_size ) {
 
-		for(j = 0 ; j < M ; j++) { 
-			temp = A[i][j];
-			B[j][i] = temp;
+                           
+
+			for(k = i ; (k < (i + block_size)) ; k++) {
+
+				
+				for(l = j ; (l < (j + block_size)) ; l ++) {
+
+						temp = A[k][l];
+						B[l][k] = temp;
+				}
+
+
+
+			}
 
 		}
 
 	}
 
+
+
+for( i = 0 ; i < 48 ;i ++) {
+
+		for( j = 48 ; j < 67 ; j ++ ) {
+
+						temp = A[i][j];
+                                                B[j][i] = temp;
+
+
+         }
+
 }
 
+
+
+
+
+for( i = 48 ; i < 61 ;i ++) {
+
+		for( j = 0 ; j < 67 ; j ++ ) {
+
+						temp = A[i][j];
+                                                B[j][i] = temp;
+
+
+         }
+
+}
+
+}
 ENSURES(is_transpose(M, N, A, B));
 
 
