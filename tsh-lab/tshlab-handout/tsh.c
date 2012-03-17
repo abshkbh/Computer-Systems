@@ -102,6 +102,12 @@ typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
 
+pid_t Fork();
+void Execve(char *program,char **argv,char **env);
+int Sigemptyset(sigset_t *set);
+int Sigaddset(sigset_t *set,int signum);
+int Sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+
 
 /*
  * main - The shell's main routine 
@@ -196,10 +202,20 @@ eval(char *cmdline)
 {
     int bg;              /* should the job run in bg or fg? */
     struct cmdline_tokens tok;
-    pid_t tsh_pid;      /* pid of our shell */
+    pid_t tsh_pid;   
+    pid_t pid;
+    sigset_t mask;      
 
     //Get shell pid
     tsh_pid = getpid();
+
+    //Intialize mask for blocked signal
+    //Block SIGCHLD SIGINT SIGTSTP signals
+    Sigemptyset(&mask);
+    Sigaddset(&mask,SIGCHLD);
+    Sigaddset(&mask,SIGINT);
+    Sigaddset(&mask,SIGTSTP);
+    Sigprocmask(SIG_BLOCK,&mask,NULL);
 
     /* Parse command line */
     bg = parseline(cmdline, &tok); 
@@ -226,9 +242,28 @@ eval(char *cmdline)
 
        }
 
-
-
        }
+
+
+    //If tok is a external program to be run by shell 
+    else {
+
+	    //Child process   
+	    if ((pid = Fork()) == 0) {
+
+		    //Unblock masks inherited from parent process
+		    //and execute program using exec
+                    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+		    Execve(tok.argv[0],tok.argv,environ); 
+
+	    }
+
+	    //Parent process
+	    //Add child to job list and unblock signals
+	    addjob(job_list,pid,bg,tok.argv[0]);
+	    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+
+    }
 
     return;
 }
@@ -254,130 +289,130 @@ eval(char *cmdline)
  *             are statically allocated inside parseline() and will be 
  *             overwritten the next time this function is invoked.
  */
-int 
+	int 
 parseline(const char *cmdline, struct cmdline_tokens *tok) 
 {
 
-    static char array[MAXLINE];          /* holds local copy of command line */
-    const char delims[10] = " \t\r\n";   /* argument delimiters (white-space) */
-    char *buf = array;                   /* ptr that traverses command line */
-    char *next;                          /* ptr to the end of the current arg */
-    char *endbuf;                        /* ptr to the end of the cmdline string */
-    int is_bg;                           /* background job? */
+	static char array[MAXLINE];          /* holds local copy of command line */
+	const char delims[10] = " \t\r\n";   /* argument delimiters (white-space) */
+	char *buf = array;                   /* ptr that traverses command line */
+	char *next;                          /* ptr to the end of the current arg */
+	char *endbuf;                        /* ptr to the end of the cmdline string */
+	int is_bg;                           /* background job? */
 
-    int parsing_state;                   /* indicates if the next token is the
-                                            input or output file */
+	int parsing_state;                   /* indicates if the next token is the
+						input or output file */
 
-    if (cmdline == NULL) {
-        (void) fprintf(stderr, "Error: command line is NULL\n");
-        return -1;
-    }
+	if (cmdline == NULL) {
+		(void) fprintf(stderr, "Error: command line is NULL\n");
+		return -1;
+	}
 
-    (void) strncpy(buf, cmdline, MAXLINE);
-    endbuf = buf + strlen(buf);
+	(void) strncpy(buf, cmdline, MAXLINE);
+	endbuf = buf + strlen(buf);
 
-    tok->infile = NULL;
-    tok->outfile = NULL;
+	tok->infile = NULL;
+	tok->outfile = NULL;
 
-    /* Build the argv list */
-    parsing_state = ST_NORMAL;
-    tok->argc = 0;
+	/* Build the argv list */
+	parsing_state = ST_NORMAL;
+	tok->argc = 0;
 
-    while (buf < endbuf) {
-        /* Skip the white-spaces */
-        buf += strspn (buf, delims);
-        if (buf >= endbuf) break;
+	while (buf < endbuf) {
+		/* Skip the white-spaces */
+		buf += strspn (buf, delims);
+		if (buf >= endbuf) break;
 
-        /* Check for I/O redirection specifiers */
-        if (*buf == '<') {
-            if (tok->infile) {
-                (void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
-                return -1;
-            }
-            parsing_state |= ST_INFILE;
-            buf++;
-            continue;
-        }
-        if (*buf == '>') {
-            if (tok->outfile) {
-                (void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
-                return -1;
-            }
-            parsing_state |= ST_OUTFILE;
-            buf ++;
-            continue;
-        }
+		/* Check for I/O redirection specifiers */
+		if (*buf == '<') {
+			if (tok->infile) {
+				(void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
+				return -1;
+			}
+			parsing_state |= ST_INFILE;
+			buf++;
+			continue;
+		}
+		if (*buf == '>') {
+			if (tok->outfile) {
+				(void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
+				return -1;
+			}
+			parsing_state |= ST_OUTFILE;
+			buf ++;
+			continue;
+		}
 
-        if (*buf == '\'' || *buf == '\"') {
-            /* Detect quoted tokens */
-            buf++;
-            next = strchr (buf, *(buf-1));
-        } else {
-            /* Find next delimiter */
-            next = buf + strcspn (buf, delims);
-        }
-        
-        if (next == NULL) {
-            /* Returned by strchr(); this means that the closing
-               quote was not found. */
-            (void) fprintf (stderr, "Error: unmatched %c.\n", *(buf-1));
-            return -1;
-        }
+		if (*buf == '\'' || *buf == '\"') {
+			/* Detect quoted tokens */
+			buf++;
+			next = strchr (buf, *(buf-1));
+		} else {
+			/* Find next delimiter */
+			next = buf + strcspn (buf, delims);
+		}
 
-        /* Terminate the token */
-        *next = '\0';
+		if (next == NULL) {
+			/* Returned by strchr(); this means that the closing
+			   quote was not found. */
+			(void) fprintf (stderr, "Error: unmatched %c.\n", *(buf-1));
+			return -1;
+		}
 
-        /* Record the token as either the next argument or the input/output file */
-        switch (parsing_state) {
-        case ST_NORMAL:
-            tok->argv[tok->argc++] = buf;
-            break;
-        case ST_INFILE:
-            tok->infile = buf;
-            break;
-        case ST_OUTFILE:
-            tok->outfile = buf;
-            break;
-        default:
-            (void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
-            return -1;
-        }
-        parsing_state = ST_NORMAL;
+		/* Terminate the token */
+		*next = '\0';
 
-        /* Check if argv is full */
-        if (tok->argc >= MAXARGS-1) break;
+		/* Record the token as either the next argument or the input/output file */
+		switch (parsing_state) {
+			case ST_NORMAL:
+				tok->argv[tok->argc++] = buf;
+				break;
+			case ST_INFILE:
+				tok->infile = buf;
+				break;
+			case ST_OUTFILE:
+				tok->outfile = buf;
+				break;
+			default:
+				(void) fprintf(stderr, "Error: Ambiguous I/O redirection\n");
+				return -1;
+		}
+		parsing_state = ST_NORMAL;
 
-        buf = next + 1;
-    }
+		/* Check if argv is full */
+		if (tok->argc >= MAXARGS-1) break;
 
-    if (parsing_state != ST_NORMAL) {
-        (void) fprintf(stderr, "Error: must provide file name for redirection\n");
-        return -1;
-    }
+		buf = next + 1;
+	}
 
-    /* The argument list must end with a NULL pointer */
-    tok->argv[tok->argc] = NULL;
+	if (parsing_state != ST_NORMAL) {
+		(void) fprintf(stderr, "Error: must provide file name for redirection\n");
+		return -1;
+	}
 
-    if (tok->argc == 0)  /* ignore blank line */
-        return 1;
+	/* The argument list must end with a NULL pointer */
+	tok->argv[tok->argc] = NULL;
 
-    if (!strcmp(tok->argv[0], "quit")) {                 /* quit command */
-        tok->builtins = BUILTIN_QUIT;
-    } else if (!strcmp(tok->argv[0], "jobs")) {          /* jobs command */
-        tok->builtins = BUILTIN_JOBS;
-    } else if (!strcmp(tok->argv[0], "bg")) {            /* bg command */
-        tok->builtins = BUILTIN_BG;
-    } else if (!strcmp(tok->argv[0], "fg")) {            /* fg command */
-        tok->builtins = BUILTIN_FG;
-    } else {
-        tok->builtins = BUILTIN_NONE;
-    }
+	if (tok->argc == 0)  /* ignore blank line */
+		return 1;
 
-    /* Should the job run in the background? */
-    if ((is_bg = (*tok->argv[tok->argc-1] == '&')) != 0)
-        tok->argv[--tok->argc] = NULL;
+	if (!strcmp(tok->argv[0], "quit")) {                 /* quit command */
+		tok->builtins = BUILTIN_QUIT;
+	} else if (!strcmp(tok->argv[0], "jobs")) {          /* jobs command */
+		tok->builtins = BUILTIN_JOBS;
+	} else if (!strcmp(tok->argv[0], "bg")) {            /* bg command */
+		tok->builtins = BUILTIN_BG;
+	} else if (!strcmp(tok->argv[0], "fg")) {            /* fg command */
+		tok->builtins = BUILTIN_FG;
+	} else {
+		tok->builtins = BUILTIN_NONE;
+	}
 
-    return is_bg;
+	/* Should the job run in the background? */
+	if ((is_bg = (*tok->argv[tok->argc-1] == '&')) != 0)
+		tok->argv[--tok->argc] = NULL;
+
+	return is_bg;
 }
 
 
@@ -392,10 +427,10 @@ parseline(const char *cmdline, struct cmdline_tokens *tok)
  *     handler reaps all available zombie children, but doesn't wait 
  *     for any other currently running children to terminate.  
  */
-void 
+	void 
 sigchld_handler(int sig) 
 {
-    return;
+	return;
 }
 
 /* 
@@ -403,10 +438,10 @@ sigchld_handler(int sig)
  *    user types ctrl-c at the keyboard.  Catch it and send it along
  *    to the foreground job.  
  */
-void 
+	void 
 sigint_handler(int sig) 
 {
-    return;
+	return;
 }
 
 /*
@@ -414,10 +449,10 @@ sigint_handler(int sig)
  *     the user types ctrl-z at the keyboard. Catch it and suspend the
  *     foreground job by sending it a SIGTSTP.  
  */
-void 
+	void 
 sigtstp_handler(int sig) 
 {
-    return;
+	return;
 }
 
 /*********************
@@ -431,175 +466,175 @@ sigtstp_handler(int sig)
 /* clearjob - Clear the entries in a job struct */
 void 
 clearjob(struct job_t *job) {
-    job->pid = 0;
-    job->jid = 0;
-    job->state = UNDEF;
-    job->cmdline[0] = '\0';
+	job->pid = 0;
+	job->jid = 0;
+	job->state = UNDEF;
+	job->cmdline[0] = '\0';
 }
 
 /* initjobs - Initialize the job list */
 void 
 initjobs(struct job_t *job_list) {
-    int i;
+	int i;
 
-    for (i = 0; i < MAXJOBS; i++)
-        clearjob(&job_list[i]);
+	for (i = 0; i < MAXJOBS; i++)
+		clearjob(&job_list[i]);
 }
 
 /* maxjid - Returns largest allocated job ID */
-int 
+	int 
 maxjid(struct job_t *job_list) 
 {
-    int i, max=0;
+	int i, max=0;
 
-    for (i = 0; i < MAXJOBS; i++)
-        if (job_list[i].jid > max)
-            max = job_list[i].jid;
-    return max;
+	for (i = 0; i < MAXJOBS; i++)
+		if (job_list[i].jid > max)
+			max = job_list[i].jid;
+	return max;
 }
 
 /* addjob - Add a job to the job list */
-int 
+	int 
 addjob(struct job_t *job_list, pid_t pid, int state, char *cmdline) 
 {
-    int i;
+	int i;
 
-    if (pid < 1)
-        return 0;
+	if (pid < 1)
+		return 0;
 
-    for (i = 0; i < MAXJOBS; i++) {
-        if (job_list[i].pid == 0) {
-            job_list[i].pid = pid;
-            job_list[i].state = state;
-            job_list[i].jid = nextjid++;
-            if (nextjid > MAXJOBS)
-                nextjid = 1;
-            strcpy(job_list[i].cmdline, cmdline);
-            if(verbose){
-                printf("Added job [%d] %d %s\n", job_list[i].jid, job_list[i].pid, job_list[i].cmdline);
-            }
-            return 1;
-        }
-    }
-    printf("Tried to create too many jobs\n");
-    return 0;
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].pid == 0) {
+			job_list[i].pid = pid;
+			job_list[i].state = state;
+			job_list[i].jid = nextjid++;
+			if (nextjid > MAXJOBS)
+				nextjid = 1;
+			strcpy(job_list[i].cmdline, cmdline);
+			if(verbose){
+				printf("Added job [%d] %d %s\n", job_list[i].jid, job_list[i].pid, job_list[i].cmdline);
+			}
+			return 1;
+		}
+	}
+	printf("Tried to create too many jobs\n");
+	return 0;
 }
 
 /* deletejob - Delete a job whose PID=pid from the job list */
-int 
+	int 
 deletejob(struct job_t *job_list, pid_t pid) 
 {
-    int i;
+	int i;
 
-    if (pid < 1)
-        return 0;
+	if (pid < 1)
+		return 0;
 
-    for (i = 0; i < MAXJOBS; i++) {
-        if (job_list[i].pid == pid) {
-            clearjob(&job_list[i]);
-            nextjid = maxjid(job_list)+1;
-            return 1;
-        }
-    }
-    return 0;
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].pid == pid) {
+			clearjob(&job_list[i]);
+			nextjid = maxjid(job_list)+1;
+			return 1;
+		}
+	}
+	return 0;
 }
 
 /* fgpid - Return PID of current foreground job, 0 if no such job */
 pid_t 
 fgpid(struct job_t *job_list) {
-    int i;
+	int i;
 
-    for (i = 0; i < MAXJOBS; i++)
-        if (job_list[i].state == FG)
-            return job_list[i].pid;
-    return 0;
+	for (i = 0; i < MAXJOBS; i++)
+		if (job_list[i].state == FG)
+			return job_list[i].pid;
+	return 0;
 }
 
 /* getjobpid  - Find a job (by PID) on the job list */
 struct job_t 
 *getjobpid(struct job_t *job_list, pid_t pid) {
-    int i;
+	int i;
 
-    if (pid < 1)
-        return NULL;
-    for (i = 0; i < MAXJOBS; i++)
-        if (job_list[i].pid == pid)
-            return &job_list[i];
-    return NULL;
+	if (pid < 1)
+		return NULL;
+	for (i = 0; i < MAXJOBS; i++)
+		if (job_list[i].pid == pid)
+			return &job_list[i];
+	return NULL;
 }
 
 /* getjobjid  - Find a job (by JID) on the job list */
 struct job_t *getjobjid(struct job_t *job_list, int jid) 
 {
-    int i;
+	int i;
 
-    if (jid < 1)
-        return NULL;
-    for (i = 0; i < MAXJOBS; i++)
-        if (job_list[i].jid == jid)
-            return &job_list[i];
-    return NULL;
+	if (jid < 1)
+		return NULL;
+	for (i = 0; i < MAXJOBS; i++)
+		if (job_list[i].jid == jid)
+			return &job_list[i];
+	return NULL;
 }
 
 /* pid2jid - Map process ID to job ID */
-int 
+	int 
 pid2jid(pid_t pid) 
 {
-    int i;
+	int i;
 
-    if (pid < 1)
-        return 0;
-    for (i = 0; i < MAXJOBS; i++)
-        if (job_list[i].pid == pid) {
-            return job_list[i].jid;
-        }
-    return 0;
+	if (pid < 1)
+		return 0;
+	for (i = 0; i < MAXJOBS; i++)
+		if (job_list[i].pid == pid) {
+			return job_list[i].jid;
+		}
+	return 0;
 }
 
 /* listjobs - Print the job list */
-void 
+	void 
 listjobs(struct job_t *job_list, int output_fd) 
 {
-    int i;
-    char buf[MAXLINE];
+	int i;
+	char buf[MAXLINE];
 
-    for (i = 0; i < MAXJOBS; i++) {
-        memset(buf, '\0', MAXLINE);
-        if (job_list[i].pid != 0) {
-            sprintf(buf, "[%d] (%d) ", job_list[i].jid, job_list[i].pid);
-            if(write(output_fd, buf, strlen(buf)) < 0) {
-                fprintf(stderr, "Error writing to output file\n");
-                exit(1);
-            }
-            memset(buf, '\0', MAXLINE);
-            switch (job_list[i].state) {
-            case BG:
-                sprintf(buf, "Running    ");
-                break;
-            case FG:
-                sprintf(buf, "Foreground ");
-                break;
-            case ST:
-                sprintf(buf, "Stopped    ");
-                break;
-            default:
-                sprintf(buf, "listjobs: Internal error: job[%d].state=%d ",
-                        i, job_list[i].state);
-            }
-            if(write(output_fd, buf, strlen(buf)) < 0) {
-                fprintf(stderr, "Error writing to output file\n");
-                exit(1);
-            }
-            memset(buf, '\0', MAXLINE);
-            sprintf(buf, "%s\n", job_list[i].cmdline);
-            if(write(output_fd, buf, strlen(buf)) < 0) {
-                fprintf(stderr, "Error writing to output file\n");
-                exit(1);
-            }
-        }
-    }
-    if(output_fd != STDOUT_FILENO)
-        close(output_fd);
+	for (i = 0; i < MAXJOBS; i++) {
+		memset(buf, '\0', MAXLINE);
+		if (job_list[i].pid != 0) {
+			sprintf(buf, "[%d] (%d) ", job_list[i].jid, job_list[i].pid);
+			if(write(output_fd, buf, strlen(buf)) < 0) {
+				fprintf(stderr, "Error writing to output file\n");
+				exit(1);
+			}
+			memset(buf, '\0', MAXLINE);
+			switch (job_list[i].state) {
+				case BG:
+					sprintf(buf, "Running    ");
+					break;
+				case FG:
+					sprintf(buf, "Foreground ");
+					break;
+				case ST:
+					sprintf(buf, "Stopped    ");
+					break;
+				default:
+					sprintf(buf, "listjobs: Internal error: job[%d].state=%d ",
+							i, job_list[i].state);
+			}
+			if(write(output_fd, buf, strlen(buf)) < 0) {
+				fprintf(stderr, "Error writing to output file\n");
+				exit(1);
+			}
+			memset(buf, '\0', MAXLINE);
+			sprintf(buf, "%s\n", job_list[i].cmdline);
+			if(write(output_fd, buf, strlen(buf)) < 0) {
+				fprintf(stderr, "Error writing to output file\n");
+				exit(1);
+			}
+		}
+	}
+	if(output_fd != STDOUT_FILENO)
+		close(output_fd);
 }
 /******************************
  * end job list helper routines
@@ -613,61 +648,92 @@ listjobs(struct job_t *job_list, int output_fd)
 /*
  * usage - print a help message
  */
-void 
+	void 
 usage(void) 
 {
-    printf("Usage: shell [-hvp]\n");
-    printf("   -h   print this message\n");
-    printf("   -v   print additional diagnostic information\n");
-    printf("   -p   do not emit a command prompt\n");
-    exit(1);
+	printf("Usage: shell [-hvp]\n");
+	printf("   -h   print this message\n");
+	printf("   -v   print additional diagnostic information\n");
+	printf("   -p   do not emit a command prompt\n");
+	exit(1);
 }
 
 /*
  * unix_error - unix-style error routine
  */
-void 
+	void 
 unix_error(char *msg)
 {
-    fprintf(stdout, "%s: %s\n", msg, strerror(errno));
-    exit(1);
+	fprintf(stdout, "%s: %s\n", msg, strerror(errno));
+	exit(1);
 }
 
 /*
  * app_error - application-style error routine
  */
-void 
+	void 
 app_error(char *msg)
 {
-    fprintf(stdout, "%s\n", msg);
-    exit(1);
+	fprintf(stdout, "%s\n", msg);
+	exit(1);
 }
 
 /*
  * Signal - wrapper for the sigaction function
  */
-handler_t 
+	handler_t 
 *Signal(int signum, handler_t *handler) 
 {
-    struct sigaction action, old_action;
+	struct sigaction action, old_action;
 
-    action.sa_handler = handler;  
-    sigemptyset(&action.sa_mask); /* block sigs of type being handled */
-    action.sa_flags = SA_RESTART; /* restart syscalls if possible */
+	action.sa_handler = handler;  
+	sigemptyset(&action.sa_mask); /* block sigs of type being handled */
+	action.sa_flags = SA_RESTART; /* restart syscalls if possible */
 
-    if (sigaction(signum, &action, &old_action) < 0)
-        unix_error("Signal error");
-    return (old_action.sa_handler);
+	if (sigaction(signum, &action, &old_action) < 0)
+		unix_error("Signal error");
+	return (old_action.sa_handler);
 }
 
 /*
  * sigquit_handler - The driver program can gracefully terminate the
  *    child shell by sending it a SIGQUIT signal.
  */
-void 
+	void 
 sigquit_handler(int sig) 
 {
-    printf("Terminating after receipt of SIGQUIT signal\n");
-    exit(1);
+	printf("Terminating after receipt of SIGQUIT signal\n");
+	exit(1);
+}
+
+
+
+//System call wrappers with error handling
+
+//System call wrapper for fork()
+pid_t Fork() {
+	return fork();
+}
+
+//System call wrapper for exec()
+void Execve(char *program,char **argv,char **env) {
+	execve(program,argv,env);
+}
+
+
+//System call wrapper for sigemptyset(sigset_t set)
+int Sigemptyset(sigset_t *set) {
+	return sigemptyset(set);
+}
+
+
+//System call wrapper for sigaddset(sigset_t set,int signum)
+int Sigaddset(sigset_t *set,int signum) {
+	return sigaddset(set,signum);
+}
+
+//System call wrapper for sigemptyset(sigset_t set)
+int Sigprocmask(int how,const sigset_t *set,sigset_t *oldset) {
+	return sigprocmask(how,set,oldset);
 }
 
