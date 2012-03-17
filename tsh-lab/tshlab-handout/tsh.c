@@ -104,7 +104,7 @@ struct job_t *getjobpid(struct job_t *job_list, pid_t pid);
 struct job_t *getjobjid(struct job_t *job_list, int jid); 
 int pid2jid(pid_t pid); 
 void listjobs(struct job_t *job_list, int output_fd);
-
+void printjob(pid_t pid,int output_fd); 
 void usage(void);
 void unix_error(char *msg);
 void app_error(char *msg);
@@ -211,6 +211,7 @@ void
 eval(char *cmdline) 
 {
     int bg;              /* should the job run in bg or fg? */
+    int job_state;      /* initial value of job BG or FG based on bg */
     int status;
     struct cmdline_tokens tok;
     pid_t tsh_pid;   
@@ -273,19 +274,31 @@ eval(char *cmdline)
 
 	    }
 
+
+            if(!bg)
+		    job_state = FG;
+	    else
+		    job_state = BG;
+
 	    //Parent process
 	    //Add child to job list and unblock signals
-	    addjob(job_list,pid,bg,tok.argv[0]);
-	    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+	        addjob(job_list,pid,job_state,tok.argv[0]);
+		Sigprocmask(SIG_UNBLOCK,&mask,NULL);
 
-	    if(!bg) {
+		if(!bg) {
 
-		    //Wait fot foreground process to finish
-		    if (waitpid(pid,&status,0) < 0)
-			    unix_error("waitfg : wait pid error\n");
+		//Wait for foreground process to finish
 
-	    }
+		if (waitpid(pid,&status,0) < 0) {
+		unix_error("waitfg : wait pid error\n");
+	        deletejob(job_list,pid);
+		  }
 
+	        }
+
+		else {
+		printjob(pid,STDOUT_FILENO);
+		}
 
 
 
@@ -662,6 +675,63 @@ listjobs(struct job_t *job_list, int output_fd)
 	if(output_fd != STDOUT_FILENO)
 		close(output_fd);
 }
+
+
+/* Prints [jid] (pid) jobname 
+ * Arg - pid_t pid 
+ */
+void printjob(pid_t pid,int output_fd){   
+
+	int i;
+	char bg = '\0';   //Print & alongside job if its a background job
+	char buf[MAXLINE];
+	int job_id ;
+
+
+	job_id = pid2jid(pid);
+
+	if(job_id == 0) {
+		fprintf(stderr, "Job not present in job list\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+	sprintf(buf, "[%d] (%d) ", job_id, pid);
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == job_id) {
+			if(job_list[i].state == BG)
+				bg = '&';
+			sprintf(buf,"%s %c\n",job_list[i].cmdline,bg);
+			break;
+		}
+
+	}
+
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	if(output_fd != STDOUT_FILENO)
+		close(output_fd);
+
+}
+
+
+
+
+
+
+
+
+
 /******************************
  * end job list helper routines
  ******************************/
