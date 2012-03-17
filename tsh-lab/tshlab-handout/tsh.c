@@ -3,6 +3,16 @@
  * 
  * <Put your name and login ID here>
  */
+
+
+#define DEBUG_PRINT_ENABLED 1
+#if DEBUG_PRINT_ENABLED 
+#define DEBUG printf
+#else
+#define DEBUG(format, args...) ((void)0)
+#endif
+
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,6 +211,7 @@ void
 eval(char *cmdline) 
 {
     int bg;              /* should the job run in bg or fg? */
+    int status;
     struct cmdline_tokens tok;
     pid_t tsh_pid;   
     pid_t pid;
@@ -251,9 +262,13 @@ eval(char *cmdline)
 	    //Child process   
 	    if ((pid = Fork()) == 0) {
 
+
+		    //DEBUG("Inside child\n");                    
+		    setpgid(0,0);  //Start process in new group     
+
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
-                    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
 		    Execve(tok.argv[0],tok.argv,environ); 
 
 	    }
@@ -262,6 +277,17 @@ eval(char *cmdline)
 	    //Add child to job list and unblock signals
 	    addjob(job_list,pid,bg,tok.argv[0]);
 	    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+
+	    if(!bg) {
+
+		    //Wait fot foreground process to finish
+		    if (waitpid(pid,&status,0) < 0)
+			    unix_error("waitfg : wait pid error\n");
+
+	    }
+
+
+
 
     }
 
