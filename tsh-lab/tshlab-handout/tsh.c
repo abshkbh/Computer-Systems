@@ -196,12 +196,39 @@ eval(char *cmdline)
 {
     int bg;              /* should the job run in bg or fg? */
     struct cmdline_tokens tok;
+    pid_t tsh_pid;      /* pid of our shell */
+
+    //Get shell pid
+    tsh_pid = getpid();
 
     /* Parse command line */
     bg = parseline(cmdline, &tok); 
 
     if (bg == -1) return;               /* parsing error */
     if (tok.argv[0] == NULL)  return;   /* ignore empty lines */
+
+    /* If tok is a BUILTIN shell command */
+    if (tok.builtins != BUILTIN_NONE) {
+        
+       switch(tok.builtins) {                           
+
+                           //Built in command quit :
+                           //Send SIGKILL to all processes in shell
+       case BUILTIN_QUIT : tsh_pid = getpid();
+                           kill(-tsh_pid,SIGKILL);
+                           break;
+   
+       case BUILTIN_JOBS : break;
+       case BUILTIN_FG :   break;
+       case BUILTIN_BG : break;
+       case BUILTIN_NONE : break;
+       default : break;
+
+       }
+
+
+
+       }
 
     return;
 }
