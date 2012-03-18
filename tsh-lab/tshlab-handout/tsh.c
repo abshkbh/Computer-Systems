@@ -80,6 +80,10 @@ struct cmdline_tokens {
         BUILTIN_BG,
         BUILTIN_FG} builtins;
 };
+
+
+int fg_pid ; /* pid of current foreground group */
+
 /* End global variables */
 
 
@@ -105,6 +109,7 @@ struct job_t *getjobjid(struct job_t *job_list, int jid);
 int pid2jid(pid_t pid); 
 void listjobs(struct job_t *job_list, int output_fd);
 void printjob(pid_t pid,int output_fd); 
+void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd);           
 void usage(void);
 void unix_error(char *msg);
 void app_error(char *msg);
@@ -117,7 +122,7 @@ void Execve(char *program,char **argv,char **env);
 int Sigemptyset(sigset_t *set);
 int Sigaddset(sigset_t *set,int signum);
 int Sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
-
+int Kill(pid_t pid,int signal);
 
 /*
  * main - The shell's main routine 
@@ -246,8 +251,9 @@ eval(char *cmdline)
        case BUILTIN_QUIT : tsh_pid = getpid();
                            kill(-tsh_pid,SIGKILL);
                            break;
-   
-       case BUILTIN_JOBS : break;
+
+                           //List out all jobs when "jobs" called
+       case BUILTIN_JOBS : listjobs(job_list,STDOUT_FILENO);
        case BUILTIN_FG :   break;
        case BUILTIN_BG : break;
        case BUILTIN_NONE : break;
@@ -266,9 +272,6 @@ eval(char *cmdline)
 
 
 		    setpgid(0,0);  //Start process in new group     
-		      
-                    DEBUG("In new process %s\n",tok.argv[0]);
-
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
 		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
@@ -277,26 +280,28 @@ eval(char *cmdline)
 	    }
 
 
-            if(!bg)
+	    if(!bg)
 		    job_state = FG;
 	    else
 		    job_state = BG;
 
 	    //Parent process
-	    //Add child to job list and unblock signals
-	    addjob(job_list,pid,job_state,tok.argv[0]);
+	    //Add child to job list and unblock signal,also set fg_pid if job is foreground job	    
+	    addjob(job_list,pid,job_state,cmdline); 
+            if(!bg)
+		    fg_pid = pid;
 	    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
 	    if(!bg) {
 
 		    //Wait until foreground process terminates
 		    //Reaping of fg process always done here, thats why signals unblocked after reaping
-                    check = waitpid(pid,&status,0);
-		    
-                    if ((check<0) && (errno!=ECHILD))
+		    check = waitpid(pid,&status,0);
+
+		    if ((check<0) && (errno!=ECHILD))
 			    unix_error("waitfg : wait pid error\n");
 
-		      deletejob(job_list,pid);
+		    deletejob(job_list,pid);
 
 	    }
 
@@ -492,6 +497,12 @@ sigchld_handler(int sig)
 	void 
 sigint_handler(int sig) 
 {
+	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that fg job was terminated by SIGINT signal 
+
+	//Delete fg job from list and send SIGINT to all processes in fg group 
+	deletejob(job_list,fg_pid);
+	Kill(-fg_pid,SIGINT);
+
 	return;
 }
 
@@ -692,10 +703,10 @@ listjobs(struct job_t *job_list, int output_fd)
 /* Prints [jid] (pid) jobname 
  * Arg - pid_t pid 
  */
+
 void printjob(pid_t pid,int output_fd){   
 
 	int i;
-	char bg = '\0';   //Print & alongside job if its a background job
 	char buf[MAXLINE];
 	int job_id ;
 
@@ -718,9 +729,7 @@ void printjob(pid_t pid,int output_fd){
 
 	for (i = 0; i < MAXJOBS; i++) {
 		if (job_list[i].jid == job_id) {
-			if(job_list[i].state == BG)
-				bg = '&';
-			sprintf(buf,"%s %c\n",job_list[i].cmdline,bg);
+			sprintf(buf,"%s\n",job_list[i].cmdline);
 			break;
 		}
 
@@ -737,9 +746,49 @@ void printjob(pid_t pid,int output_fd){
 }
 
 
+//Print message that fg job was terminated by SIGINT signal 
+void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd) {
+
+	int i;
+	char buf[MAXLINE];
+	int job_id ;
+
+
+	job_id = pid2jid(pid);
+
+	if(job_id == 0) {
+		fprintf(stderr, "Job not present in job list\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+	sprintf(buf, "Job [%d] (%d) ", job_id, pid);
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == job_id) {
+			sprintf(buf,"terminated by signal %d\n",signal);
+			break;
+		}
+
+	}
+
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	if(output_fd != STDOUT_FILENO)
+		close(output_fd);
 
 
 
+}        
 
 
 
@@ -845,3 +894,7 @@ int Sigprocmask(int how,const sigset_t *set,sigset_t *oldset) {
 	return sigprocmask(how,set,oldset);
 }
 
+//System call wrapper for kill(pid_t pid,int signal)
+int Kill(pid_t pid,int signal) {
+	return kill(pid,signal);
+}
