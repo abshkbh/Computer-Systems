@@ -475,7 +475,7 @@ sigchld_handler(int sig)
 {
 	pid_t pid;
 	//Reap zombie processes
-	while((pid = waitpid(-1,NULL,0)) > 0) {
+	while((pid = waitpid(-1,NULL,WNOHANG)) > 0) {
 		deletejob(job_list,pid);
 	}
 	if(errno!=ECHILD)
