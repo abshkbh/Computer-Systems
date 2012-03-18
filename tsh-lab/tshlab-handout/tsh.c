@@ -213,6 +213,7 @@ eval(char *cmdline)
     int bg;              /* should the job run in bg or fg? */
     int job_state;      /* initial value of job BG or FG based on bg */
     int status;
+    int check;
     struct cmdline_tokens tok;
     pid_t tsh_pid;   
     pid_t pid;
@@ -264,8 +265,9 @@ eval(char *cmdline)
 	    if ((pid = Fork()) == 0) {
 
 
-		    //DEBUG("Inside child\n");                    
 		    setpgid(0,0);  //Start process in new group     
+		      
+                    DEBUG("In new process %s\n",tok.argv[0]);
 
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
@@ -282,23 +284,25 @@ eval(char *cmdline)
 
 	    //Parent process
 	    //Add child to job list and unblock signals
-	        addjob(job_list,pid,job_state,tok.argv[0]);
-		Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+	    addjob(job_list,pid,job_state,tok.argv[0]);
+	    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
-		if(!bg) {
+	    if(!bg) {
 
-		//Wait for foreground process to finish
+		    //Wait until foreground process terminates
+		    //Reaping of fg process always done here, thats why signals unblocked after reaping
+                    check = waitpid(pid,&status,0);
+		    
+                    if ((check<0) && (errno!=ECHILD))
+			    unix_error("waitfg : wait pid error\n");
 
-		if (waitpid(pid,&status,0) < 0) {
-		unix_error("waitfg : wait pid error\n");
-	        deletejob(job_list,pid);
-		  }
+		      deletejob(job_list,pid);
 
-	        }
+	    }
 
-		else {
-		printjob(pid,STDOUT_FILENO);
-		}
+	    else {
+		    printjob(pid,STDOUT_FILENO);
+	    }
 
 
 
@@ -469,6 +473,14 @@ parseline(const char *cmdline, struct cmdline_tokens *tok)
 	void 
 sigchld_handler(int sig) 
 {
+	pid_t pid;
+	//Reap zombie processes
+	while((pid = waitpid(-1,NULL,0)) > 0) {
+		deletejob(job_list,pid);
+	}
+	if(errno!=ECHILD)
+		unix_error("waitpid error"); 
+
 	return;
 }
 
