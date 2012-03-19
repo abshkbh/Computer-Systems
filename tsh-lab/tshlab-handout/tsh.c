@@ -5,7 +5,7 @@
  */
 
 
-#define DEBUG_PRINT_ENABLED 1
+//#define DEBUG_PRINT_ENABLED 1
 #if DEBUG_PRINT_ENABLED 
 #define DEBUG printf
 #else
@@ -110,6 +110,8 @@ int pid2jid(pid_t pid);
 void listjobs(struct job_t *job_list, int output_fd);
 void printjob(pid_t pid,int output_fd); 
 void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd);           
+void print_sigtstp_job(struct job_t *job_list,pid_t pid,int signal,int output_fd);
+void change_job_state(struct job_t *job_list,pid_t pid,int new_state);
 void usage(void);
 void unix_error(char *msg);
 void app_error(char *msg);
@@ -223,6 +225,7 @@ eval(char *cmdline)
     pid_t tsh_pid;   
     pid_t pid;
     sigset_t mask;      
+    
 
     //Get shell pid
     tsh_pid = getpid();
@@ -279,7 +282,6 @@ eval(char *cmdline)
 
 	    }
 
-
 	    if(!bg)
 		    job_state = FG;
 	    else
@@ -292,16 +294,17 @@ eval(char *cmdline)
 		    fg_pid = pid;
 	    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
+            //Wait until foreground process terminates or is stopped
 	    if(!bg) {
 
-		    //Wait until foreground process terminates
-		    //Reaping of fg process always done here, thats why signals unblocked after reaping
-		    check = waitpid(pid,&status,0);
-
+		    check = waitpid(pid,&status,WUNTRACED);
 		    if ((check<0) && (errno!=ECHILD))
 			    unix_error("waitfg : wait pid error\n");
+		    
+                    if ((check == pid) && WIFSTOPPED(status))
+                        return;
 
-		    deletejob(job_list,pid);
+                    deletejob(job_list,pid);
 
 	    }
 
@@ -497,7 +500,7 @@ sigchld_handler(int sig)
 	void 
 sigint_handler(int sig) 
 {
-	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that fg job was terminated by SIGINT signal 
+	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that job was terminated by SIGINT signal 
 
 	//Delete fg job from list and send SIGINT to all processes in fg group 
 	deletejob(job_list,fg_pid);
@@ -513,7 +516,13 @@ sigint_handler(int sig)
  */
 	void 
 sigtstp_handler(int sig) 
-{
+{       	
+
+	print_sigtstp_job(job_list,fg_pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
+
+	//Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
+	change_job_state(job_list,fg_pid,ST);
+	Kill(-fg_pid,SIGTSTP);
 	return;
 }
 
@@ -786,13 +795,79 @@ void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd)
 	if(output_fd != STDOUT_FILENO)
 		close(output_fd);
 
-
+	return;
 
 }        
 
+//Print message that job was stpped by SIGSTP signal 
+void print_sigtstp_job(struct job_t *job_list,pid_t pid,int signal,int output_fd) {
+
+	int i;
+	char buf[MAXLINE];
+	int job_id ;
+
+	job_id = pid2jid(pid);
+
+	if(job_id == 0) {
+		fprintf(stderr, "Job not present in job list\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+	sprintf(buf, "Job [%d] (%d) ", job_id, pid);
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	memset(buf, '\0', MAXLINE);
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == job_id) {
+			sprintf(buf,"stopped by signal %d\n",signal);
+			break;
+		}
+
+	}
+
+	if(write(output_fd, buf, strlen(buf)) < 0) {
+		fprintf(stderr, "Error writing to output file\n");
+		exit(1);
+	}
+
+	if(output_fd != STDOUT_FILENO)
+		close(output_fd);
+
+	return;
+} 
+
+
+void change_job_state(struct job_t *job_list,pid_t pid,int new_state) {
 
 
 
+	int i;
+	int job_id ;
+
+
+	job_id = pid2jid(pid);
+
+	if(job_id == 0) {
+		fprintf(stderr, "Job not present in job list\n");
+		exit(1);
+	}
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == job_id) {
+			job_list[i].state = new_state;
+			break;
+		}
+
+	}
+
+	return;
+
+}
 /******************************
  * end job list helper routines
  ******************************/
