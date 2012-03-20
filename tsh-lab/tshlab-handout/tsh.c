@@ -225,6 +225,7 @@ eval(char *cmdline)
     struct cmdline_tokens tok;
     pid_t pid;
     sigset_t mask;      
+    sigset_t mask2;      
 
     //Get shell pid
     tsh_pid = getpid();
@@ -232,9 +233,12 @@ eval(char *cmdline)
     //Intialize mask for blocked signal
     //Block SIGCHLD SIGINT SIGTSTP signals
     Sigemptyset(&mask);
+    Sigemptyset(&mask2);
     Sigaddset(&mask,SIGCHLD);
     Sigaddset(&mask,SIGINT);
+    Sigaddset(&mask2,SIGINT);
     Sigaddset(&mask,SIGTSTP);
+    Sigaddset(&mask2,SIGTSTP);
     Sigprocmask(SIG_BLOCK,&mask,NULL);
 
     /* Parse command line */
@@ -286,25 +290,22 @@ eval(char *cmdline)
 
 	    }
 
-	   // if(!bg)
-//		    job_state = FG;
-//	    else
-//		    job_state = BG;
 
 	    //Parent process
 	    //Add child to job list and unblock signal,also set fg_pid if job is foreground job	    
 	    addjob(job_list,pid,job_state,cmdline); 
 	    if(!bg)
 		    fg_pid = pid;
-	    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
+	    Sigprocmask(SIG_UNBLOCK,&mask2,NULL); 
 
-	    //Wait until foreground process terminates/killed or is stopped
+	    //Until foreground process terminates SIGCHLD functionality is done here , SIGINT and SIGTSTP are handled by handlers 
 	    if(!bg) {
+		          
 
 		    check = waitpid(pid,&status,WUNTRACED);
-		    if ((check<0) && (errno!=ECHILD))
-			    unix_error("waitfg : wait pid error\n");
-
+		    if ((check<0) && (errno!=ECHILD)) 
+                          unix_error("waitfg : wait pid error\n");
+                        
 		    if ((check == pid) && WIFSTOPPED(status))
 			    return;
 
@@ -313,10 +314,12 @@ eval(char *cmdline)
 
 
 		    deletejob(job_list,pid);
+	            Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
 	    }
 
 	    else {
+	            Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 		    printjob(pid,STDOUT_FILENO);
 	    }
 
@@ -522,8 +525,6 @@ sigint_handler(int sig)
 
 	//Delete fg job from list and send SIGINT to all processes in fg group 
 
-//	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that fg job was terminated by SIGINT signal 
-//	deletejob(job_list,fg_pid);
 	Kill(-fg_pid,SIGINT);
 
 }
@@ -535,14 +536,33 @@ sigint_handler(int sig)
  */
 	void 
 sigtstp_handler(int sig) 
-{       	
+{        
+        pid_t pid;       	
+        pid = getpid();
 
+        //If SIGTSTP sent to shell (main parent of all jobs)
+//        if (pid == tsh_pid) {
 	print_sigtstp_job(job_list,fg_pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
 
 	//Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
 	change_job_state(job_list,fg_pid,ST);
 	Kill(-fg_pid,SIGTSTP);
-	return;
+	
+  //      }
+
+    /*    else {
+       DEBUG("Reached here \n");      
+
+ 	print_sigtstp_job(job_list,pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
+
+	//Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
+	change_job_state(job_list,pid,ST);
+	Kill(-pid,SIGTSTP);
+
+
+
+         } */
+        return;
 }
 
 /*********************
