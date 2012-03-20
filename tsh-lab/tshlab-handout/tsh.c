@@ -230,6 +230,7 @@ eval(char *cmdline)
     int jid = -255;   //  dummy values 
     sigset_t mask;      
     sigset_t mask2;      
+    int flag = 0; //Used while processing "fg" built in command
 
     //Get shell pid
     tsh_pid = getpid();
@@ -265,29 +266,55 @@ eval(char *cmdline)
                            //List out all jobs when "jobs" called
        case BUILTIN_JOBS : listjobs(job_list,STDOUT_FILENO);
                            break;
-       case BUILTIN_FG :   break;
-       
-                           //Parse job id or pid given with bg command
-                           // Change state from ST to BG in job_list
-                           // Send SIGCONT signal to job
-       case BUILTIN_BG :   if(*(char *)(tok.argv[1]) == '%' )
-                               jid = atoi( (((char *)(tok.argv[1])) + 1) ); 
-                        
-                           pid = jid2pid(jid);
-                           printjob(pid,STDOUT_FILENO);
-			   change_job_state_jid(job_list,jid,BG);
-                           Kill(-pid,SIGCONT);
-                           break;
+			   
+
+                           // Parse job id or pid given with bg command
+			   // Change state from ST to BG in job_list
+			   // Send SIGCONT signal to job
+
+       case BUILTIN_FG :   if(*(char *)(tok.argv[1]) == '%' ) {
+				   jid = atoi( (((char *)(tok.argv[1])) + 1) ); 
+				   pid = jid2pid(jid);
+			   }
+			   else {
+				   pid = atoi(tok.argv[1]);
+				   jid = pid2jid(pid);
+			   }
+			   change_job_state(job_list,pid,FG);
+			   flag = 1;                            //flag set because we want to jump into else clause below 
+                                                               // and process started job as an foreground job
+                           Kill(-pid,SIGCONT);  
+			   break;
+
+			   //Parse job id or pid given with bg command
+			   // Change state from ST to BG in job_list
+			   // Send SIGCONT signal to job
+       case BUILTIN_BG :   if(*(char *)(tok.argv[1]) == '%' ) {
+				   jid = atoi( (((char *)(tok.argv[1])) + 1) ); 
+				   pid = jid2pid(jid);
+			   }
+			   else {
+				   pid = atoi(tok.argv[1]);
+				   jid = pid2jid(pid);
+			   }
+			   printjob(pid,STDOUT_FILENO);
+			   change_job_state(job_list,pid,BG);
+			   Kill(-pid,SIGCONT);
+			   break;
        case BUILTIN_NONE : break;
        default : break;
 
        }
 
-       }
+    }
 
 
     //If tok is a external program to be run by shell 
-    else {
+    else if ((tok.builtins == BUILTIN_NONE) || (flag == 1)) {
+
+	    if (flag == 1) 
+		    bg = 0;
+
 	    if(!bg)
 		    job_state = FG;
 	    else
@@ -299,10 +326,10 @@ eval(char *cmdline)
 		    setpgid(0,0);  //Start process in new group     
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
-                     Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
-	            addjob(job_list,getpid(),job_state,cmdline); 
+		    Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
+		    addjob(job_list,getpid(),job_state,cmdline); 
 		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
-                    Execve(tok.argv[0],tok.argv,environ); 
+		    Execve(tok.argv[0],tok.argv,environ); 
 
 	    }
 
@@ -316,10 +343,10 @@ eval(char *cmdline)
 
 	    //Until foreground process terminates SIGCHLD functionality is done here , SIGINT and SIGTSTP are handled by handlers 
 	    if(!bg) {
-		          
+
 		    check = waitpid(pid,&status,WUNTRACED);
 		    if ((check<0) && (errno!=ECHILD)) 
-                          unix_error("waitfg : wait pid error\n");
+			    unix_error("waitfg : wait pid error\n");
 
 		    if ((check == pid) && WIFSTOPPED(status)){
 			    print_sigtstp_job(job_list,pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
@@ -544,15 +571,15 @@ sigint_handler(int sig)
 {       
 
 	//Delete fg job from list and send SIGINT to all processes in fg group 
-        //Only to be done when parent shell or fg job is sent this signal.
-        //OBackground jobs reaped by SIGCHLD handler
-	
-        pid_t pid; 
-        pid = getpid();
+	//Only to be done when parent shell or fg job is sent this signal.
+	//OBackground jobs reaped by SIGCHLD handler
+
+	pid_t pid; 
+	pid = getpid();
 	if ( (pid == tsh_pid) || (pid == fg_pid) )
 		Kill(-fg_pid,SIGINT);
 
-        return;
+	return;
 }
 
 /*
@@ -565,15 +592,15 @@ sigtstp_handler(int sig)
 {        
 
 	//Delete fg job from list and send SIGTSTP to all processes in fg group 
-        //Only to be done when parent shell or fg job is sent this signal.
-        //Else just send SIGTSTP to process with id "pid"
-        
-        pid_t pid; 
-        pid = getpid();
+	//Only to be done when parent shell or fg job is sent this signal.
+	//Else just send SIGTSTP to process with id "pid"
+
+	pid_t pid; 
+	pid = getpid();
 	if ( (pid == tsh_pid) || (pid == fg_pid) )
 		Kill(-fg_pid,SIGTSTP);
 
-        else
+	else
 		Kill(pid,SIGTSTP);
 
 	return;
@@ -960,8 +987,8 @@ pid_t jid2pid(int jid){
 		}
 
 	}
-     
-        return 0;
+
+	return 0;
 
 
 }
