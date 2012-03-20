@@ -1,7 +1,8 @@
 /* 
  * tsh - A tiny shell program with job control
  * 
- * <Put your name and login ID here>
+ * Name      - Abhishek Bhardwaj
+ * Andrew Id - abhisheb
  */
 
 
@@ -231,6 +232,7 @@ eval(char *cmdline)
     sigset_t mask;      
     sigset_t mask2;      
     int flag = 0; //Used while processing "fg" built in command
+    int infile_fd ; //file descriptor to be used for infile if specified 
 
     //Get shell pid
     tsh_pid = getpid();
@@ -282,7 +284,7 @@ eval(char *cmdline)
 			   }
 			   change_job_state(job_list,pid,FG);
 			   flag = 1;                            //flag set because we want to jump into else clause below 
-                                                               // and process started job as an foreground job
+                                                               // to process resumed job as an foreground job
                            Kill(-pid,SIGCONT);  
 			   break;
 
@@ -320,14 +322,27 @@ eval(char *cmdline)
 	    else
 		    job_state = BG;
 
+
+            
+
 	    //Child process   
 	    if ((pid = Fork()) == 0) {
 
 		    setpgid(0,0);  //Start process in new group     
+		    Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
+		    
+                    addjob(job_list,getpid(),job_state,cmdline); 
+
+                   // If input redirection specified open given file and point STDIN descriptor
+                   // to new file's file descriptor
+		    if (tok.infile != NULL) {
+			    infile_fd = open(tok.infile , O_RDONLY);
+			    dup2(infile_fd,STDIN_FILENO);   
+		    }
+
+
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
-		    Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
-		    addjob(job_list,getpid(),job_state,cmdline); 
 		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
 		    Execve(tok.argv[0],tok.argv,environ); 
 
