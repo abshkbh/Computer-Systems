@@ -19,7 +19,7 @@ int main()
     alarm(JOB_TIMEOUT);
 
     if (kill(getpid(), SIGINT) < 0) {
-	perror("kill");
+        perror("kill");
 	exit(1);
     }
 

@@ -83,6 +83,7 @@ struct cmdline_tokens {
 
 
 int fg_pid ; /* pid of current foreground group */
+pid_t  tsh_pid; /* for storing shell pid */
 
 /* End global variables */
 
@@ -222,10 +223,8 @@ eval(char *cmdline)
     int status;
     int check;
     struct cmdline_tokens tok;
-    pid_t tsh_pid;   
     pid_t pid;
     sigset_t mask;      
-    
 
     //Get shell pid
     tsh_pid = getpid();
@@ -269,42 +268,51 @@ eval(char *cmdline)
 
     //If tok is a external program to be run by shell 
     else {
-
-	    //Child process   
-	    if ((pid = Fork()) == 0) {
-
-
-		    setpgid(0,0);  //Start process in new group     
-		    //Unblock masks inherited from parent process
-		    //and execute program using exec
-		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
-		    Execve(tok.argv[0],tok.argv,environ); 
-
-	    }
-
 	    if(!bg)
 		    job_state = FG;
 	    else
 		    job_state = BG;
 
+	    //Child process   
+	    if ((pid = Fork()) == 0) {
+
+		    setpgid(0,0);  //Start process in new group     
+		    //Unblock masks inherited from parent process
+		    //and execute program using exec
+                     Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
+	            addjob(job_list,getpid(),job_state,cmdline); 
+		    Sigprocmask(SIG_UNBLOCK,&mask,NULL);
+                    Execve(tok.argv[0],tok.argv,environ); 
+
+	    }
+
+	   // if(!bg)
+//		    job_state = FG;
+//	    else
+//		    job_state = BG;
+
 	    //Parent process
 	    //Add child to job list and unblock signal,also set fg_pid if job is foreground job	    
 	    addjob(job_list,pid,job_state,cmdline); 
-            if(!bg)
+	    if(!bg)
 		    fg_pid = pid;
 	    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
-            //Wait until foreground process terminates or is stopped
+	    //Wait until foreground process terminates/killed or is stopped
 	    if(!bg) {
 
 		    check = waitpid(pid,&status,WUNTRACED);
 		    if ((check<0) && (errno!=ECHILD))
 			    unix_error("waitfg : wait pid error\n");
-		    
-                    if ((check == pid) && WIFSTOPPED(status))
-                        return;
 
-                    deletejob(job_list,pid);
+		    if ((check == pid) && WIFSTOPPED(status))
+			    return;
+
+		    if ((check == pid) && (WIFSIGNALED(status)))
+			    print_sigint_job(job_list,pid,WTERMSIG(status),STDOUT_FILENO);       //Print message that job/pid was terminated by a signal 
+
+
+		    deletejob(job_list,pid);
 
 	    }
 
@@ -480,12 +488,18 @@ parseline(const char *cmdline, struct cmdline_tokens *tok)
  */
 	void 
 sigchld_handler(int sig) 
-{
+{       
+	int status;
 	pid_t pid;
 	//Reap zombie processes
-	while((pid = waitpid(-1,NULL,WNOHANG)) > 0) {
+	while((pid = waitpid(-1,&status,WNOHANG)) > 0) {
+
+		if(WIFSIGNALED(status))
+			print_sigint_job(job_list,pid,WTERMSIG(status),STDOUT_FILENO);       //Print message that job/pid was terminated by a signal 
+
 		deletejob(job_list,pid);
 	}
+
 	if(errno!=ECHILD)
 		unix_error("waitpid error"); 
 
@@ -495,18 +509,23 @@ sigchld_handler(int sig)
 /* 
  * sigint_handler - The kernel sends a SIGINT to the shell whenver the
  *    user types ctrl-c at the keyboard.  Catch it and send it along
- *    to the foreground job.  
+ *    to the foreground job. 
+ *    If the SIGINT is sent to shell then forward it to the fg job else get 
+ *    pid of current process and kill itself.
+ *
  */
+
+
 	void 
 sigint_handler(int sig) 
-{
-	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that job was terminated by SIGINT signal 
+{       
 
 	//Delete fg job from list and send SIGINT to all processes in fg group 
-	deletejob(job_list,fg_pid);
+
+//	print_sigint_job(job_list,fg_pid,SIGINT,STDOUT_FILENO);          //Print message that fg job was terminated by SIGINT signal 
+//	deletejob(job_list,fg_pid);
 	Kill(-fg_pid,SIGINT);
 
-	return;
 }
 
 /*
@@ -764,6 +783,7 @@ void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd)
 
 
 	job_id = pid2jid(pid);
+
 
 	if(job_id == 0) {
 		fprintf(stderr, "Job not present in job list\n");
