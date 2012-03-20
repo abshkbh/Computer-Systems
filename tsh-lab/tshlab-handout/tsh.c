@@ -5,7 +5,7 @@
  */
 
 
-//#define DEBUG_PRINT_ENABLED 1
+#define DEBUG_PRINT_ENABLED 1
 #if DEBUG_PRINT_ENABLED 
 #define DEBUG printf
 #else
@@ -108,11 +108,14 @@ pid_t fgpid(struct job_t *job_list);
 struct job_t *getjobpid(struct job_t *job_list, pid_t pid);
 struct job_t *getjobjid(struct job_t *job_list, int jid); 
 int pid2jid(pid_t pid); 
+pid_t jid2pid(int jid);
 void listjobs(struct job_t *job_list, int output_fd);
 void printjob(pid_t pid,int output_fd); 
+void printjob_jid(int jid,int output_fd); 
 void print_sigint_job(struct job_t *job_list,pid_t pid,int signal,int output_fd);           
 void print_sigtstp_job(struct job_t *job_list,pid_t pid,int signal,int output_fd);
 void change_job_state(struct job_t *job_list,pid_t pid,int new_state);
+void change_job_state_jid(struct job_t *job_list,int jid,int new_state);
 void usage(void);
 void unix_error(char *msg);
 void app_error(char *msg);
@@ -223,7 +226,8 @@ eval(char *cmdline)
     int status;
     int check;
     struct cmdline_tokens tok;
-    pid_t pid;
+    pid_t pid = -255;  // Initialzing to
+    int jid = -255;   //  dummy values 
     sigset_t mask;      
     sigset_t mask2;      
 
@@ -260,8 +264,20 @@ eval(char *cmdline)
 
                            //List out all jobs when "jobs" called
        case BUILTIN_JOBS : listjobs(job_list,STDOUT_FILENO);
+                           break;
        case BUILTIN_FG :   break;
-       case BUILTIN_BG : break;
+       
+                           //Parse job id or pid given with bg command
+                           // Change state from ST to BG in job_list
+                           // Send SIGCONT signal to job
+       case BUILTIN_BG :   if(*(char *)(tok.argv[1]) == '%' )
+                               jid = atoi( (((char *)(tok.argv[1])) + 1) ); 
+                        
+                           pid = jid2pid(jid);
+                           printjob(pid,STDOUT_FILENO);
+			   change_job_state_jid(job_list,jid,BG);
+                           Kill(-pid,SIGCONT);
+                           break;
        case BUILTIN_NONE : break;
        default : break;
 
@@ -308,7 +324,7 @@ eval(char *cmdline)
 		    if ((check == pid) && WIFSTOPPED(status)){
 			    print_sigtstp_job(job_list,pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
 
-			    //Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
+			    //Change stopped job state in list to ST (stopped) 
 			    change_job_state(job_list,pid,ST);
 			    return;
 		    }
@@ -528,9 +544,15 @@ sigint_handler(int sig)
 {       
 
 	//Delete fg job from list and send SIGINT to all processes in fg group 
+        //Only to be done when parent shell or fg job is sent this signal.
+        //OBackground jobs reaped by SIGCHLD handler
+	
+        pid_t pid; 
+        pid = getpid();
+	if ( (pid == tsh_pid) || (pid == fg_pid) )
+		Kill(-fg_pid,SIGINT);
 
-	Kill(-fg_pid,SIGINT);
-
+        return;
 }
 
 /*
@@ -541,7 +563,19 @@ sigint_handler(int sig)
 	void 
 sigtstp_handler(int sig) 
 {        
-	Kill(-fg_pid,SIGTSTP);
+
+	//Delete fg job from list and send SIGTSTP to all processes in fg group 
+        //Only to be done when parent shell or fg job is sent this signal.
+        //Else just send SIGTSTP to process with id "pid"
+        
+        pid_t pid; 
+        pid = getpid();
+	if ( (pid == tsh_pid) || (pid == fg_pid) )
+		Kill(-fg_pid,SIGTSTP);
+
+        else
+		Kill(pid,SIGTSTP);
+
 	return;
 }
 
@@ -862,15 +896,38 @@ void print_sigtstp_job(struct job_t *job_list,pid_t pid,int signal,int output_fd
 } 
 
 
+//Changes job with id = pid to new_state in job_list
 void change_job_state(struct job_t *job_list,pid_t pid,int new_state) {
-
-
 
 	int i;
 	int job_id ;
-
-
 	job_id = pid2jid(pid);
+	if(job_id == 0) {
+		fprintf(stderr, "Job not present in job list\n");
+		exit(1);
+	}
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == job_id) {
+			job_list[i].state = new_state;
+			break;
+		}
+
+	}
+
+	return;
+
+}
+
+
+
+
+//Changes job with job id = jid to new_state in job_list
+void change_job_state_jid(struct job_t *job_list,int jid,int new_state) {
+
+	int i;
+	int job_id ;
+	job_id = jid;
 
 	if(job_id == 0) {
 		fprintf(stderr, "Job not present in job list\n");
@@ -888,6 +945,28 @@ void change_job_state(struct job_t *job_list,pid_t pid,int new_state) {
 	return;
 
 }
+/* Returns pid of a job given its jid
+ * Returns 0 if job not found
+ * Arg - int jid 
+ */
+
+pid_t jid2pid(int jid){   
+
+	int i;
+
+	for (i = 0; i < MAXJOBS; i++) {
+		if (job_list[i].jid == jid) {
+			return job_list[i].pid;
+		}
+
+	}
+     
+        return 0;
+
+
+}
+
+
 /******************************
  * end job list helper routines
  ******************************/
