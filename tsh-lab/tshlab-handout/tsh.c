@@ -232,7 +232,8 @@ eval(char *cmdline)
     sigset_t mask;      
     sigset_t mask2;      
     int flag = 0; //Used while processing "fg" built in command
-    int infile_fd ; //file descriptor to be used for infile if specified 
+    int infile_fd ; //file descriptor to be used for infile if specified in job 
+    int outfile_fd ; //file descriptor to be used for outfile if specified in job
 
     //Get shell pid
     tsh_pid = getpid();
@@ -266,13 +267,23 @@ eval(char *cmdline)
                            break;
 
                            //List out all jobs when "jobs" called
-       case BUILTIN_JOBS : listjobs(job_list,STDOUT_FILENO);
-                           break;
-			   
+                           //Also open output file if redirection specified and 
+                           //redirect jobs output to the new file's descriptor
 
-                           // Parse job id or pid given with bg command
-			   // Change state from ST to BG in job_list
-			   // Send SIGCONT signal to job
+       case BUILTIN_JOBS :  if (tok.outfile != NULL) {
+				    outfile_fd = open(tok.outfile , O_WRONLY);
+				    listjobs(job_list,outfile_fd);
+				    break;
+			    }
+
+			    else
+				    listjobs(job_list,STDOUT_FILENO);
+			    break;
+
+
+			    // Parse job id or pid given with bg command
+			    // Change state from ST to BG in job_list
+			    // Send SIGCONT signal to job
 
        case BUILTIN_FG :   if(*(char *)(tok.argv[1]) == '%' ) {
 				   jid = atoi( (((char *)(tok.argv[1])) + 1) ); 
@@ -284,8 +295,8 @@ eval(char *cmdline)
 			   }
 			   change_job_state(job_list,pid,FG);
 			   flag = 1;                            //flag set because we want to jump into else clause below 
-                                                               // to process resumed job as an foreground job
-                           Kill(-pid,SIGCONT);  
+			   // to process resumed job as a foreground job
+			   Kill(-pid,SIGCONT);  
 			   break;
 
 			   //Parse job id or pid given with bg command
@@ -323,23 +334,27 @@ eval(char *cmdline)
 		    job_state = BG;
 
 
-            
+
 
 	    //Child process   
 	    if ((pid = Fork()) == 0) {
 
 		    setpgid(0,0);  //Start process in new group     
 		    Signal(SIGINT,  SIG_DFL);   /* ctrl-c from child handled by parent's sigchld */
-		    
-                    addjob(job_list,getpid(),job_state,cmdline); 
 
-                   // If input redirection specified open given file and point STDIN descriptor
-                   // to new file's file descriptor
+		    addjob(job_list,getpid(),job_state,cmdline); 
+
+		    // If input/output redirection specified open given file and point STDIN/STDOUT descriptor
+		    // to new file's file descriptor
 		    if (tok.infile != NULL) {
 			    infile_fd = open(tok.infile , O_RDONLY);
 			    dup2(infile_fd,STDIN_FILENO);   
 		    }
 
+		    if (tok.outfile != NULL) {
+			    outfile_fd = open(tok.outfile , O_WRONLY);
+			    dup2(outfile_fd,STDOUT_FILENO);   
+		    }
 
 		    //Unblock masks inherited from parent process
 		    //and execute program using exec
@@ -763,6 +778,8 @@ listjobs(struct job_t *job_list, int output_fd)
 {
 	int i;
 	char buf[MAXLINE];
+
+
 
 	for (i = 0; i < MAXJOBS; i++) {
 		memset(buf, '\0', MAXLINE);
