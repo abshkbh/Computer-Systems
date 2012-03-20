@@ -301,25 +301,29 @@ eval(char *cmdline)
 	    //Until foreground process terminates SIGCHLD functionality is done here , SIGINT and SIGTSTP are handled by handlers 
 	    if(!bg) {
 		          
-
 		    check = waitpid(pid,&status,WUNTRACED);
 		    if ((check<0) && (errno!=ECHILD)) 
                           unix_error("waitfg : wait pid error\n");
-                        
-		    if ((check == pid) && WIFSTOPPED(status))
+
+		    if ((check == pid) && WIFSTOPPED(status)){
+			    print_sigtstp_job(job_list,pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
+
+			    //Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
+			    change_job_state(job_list,pid,ST);
 			    return;
+		    }
 
 		    if ((check == pid) && (WIFSIGNALED(status)))
 			    print_sigint_job(job_list,pid,WTERMSIG(status),STDOUT_FILENO);       //Print message that job/pid was terminated by a signal 
 
 
 		    deletejob(job_list,pid);
-	            Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
+		    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 
 	    }
 
 	    else {
-	            Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
+		    Sigprocmask(SIG_UNBLOCK,&mask,NULL); 
 		    printjob(pid,STDOUT_FILENO);
 	    }
 
@@ -537,32 +541,8 @@ sigint_handler(int sig)
 	void 
 sigtstp_handler(int sig) 
 {        
-        pid_t pid;       	
-        pid = getpid();
-
-        //If SIGTSTP sent to shell (main parent of all jobs)
-//        if (pid == tsh_pid) {
-	print_sigtstp_job(job_list,fg_pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
-
-	//Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
-	change_job_state(job_list,fg_pid,ST);
 	Kill(-fg_pid,SIGTSTP);
-	
-  //      }
-
-    /*    else {
-       DEBUG("Reached here \n");      
-
- 	print_sigtstp_job(job_list,pid,SIGTSTP,STDOUT_FILENO);          //Print message that job was stopped by SIGSTP signal 
-
-	//Change fg job state in list to ST (stopped) and send SIGINT to all processes in fg group 
-	change_job_state(job_list,pid,ST);
-	Kill(-pid,SIGTSTP);
-
-
-
-         } */
-        return;
+	return;
 }
 
 /*********************
