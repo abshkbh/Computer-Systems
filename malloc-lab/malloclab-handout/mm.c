@@ -15,7 +15,7 @@
 
 /* If you want debugging output, use the following macro.  When you hand
  * in, remove the #define DEBUG line. */
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -125,6 +125,7 @@ static char * free_root = NULL;
 int mm_init(void) {
 
 	dbg_printf("In Init\n");
+        free_root = NULL;
 	if((heap_listp = mem_sbrk((4*WSIZE))) == (void *)-1) {
 		return -1;
 	}
@@ -169,7 +170,7 @@ static void *extend_heap(size_t words) {
 	PUT(HDRP(NEXT_BLKP(bp)),PACK(0,1)); /* New epilogue header */
 
 	/* Put newly created free block in list */
-	insert_in_list(bp);
+	//insert_in_list(bp);
 	dbg_printf("Extend Heap after insert\n");
         mm_checkheap(VERBOSE);
 
@@ -203,12 +204,12 @@ void *malloc (size_t size) {
 
 	/* Search the free list for a fit */
 	if ((bp = find_fit(asize)) != NULL) {
-		place(bp,asize);
+		dbg_printf("Returned from find fit\n");
+                place(bp,asize);
 		dbg_printf("[Success] MALLOC addr = (%p) size = (%u)\n",bp,(unsigned int)(asize));
 		mm_checkheap(VERBOSE);
 		return bp;
 	}
-
 	/* No fit found. Get more memory and place the block */
 	extendsize = MAX(asize,CHUNKSIZE);
 	if ((bp = extend_heap(extendsize/WSIZE)) == NULL) {
@@ -294,6 +295,7 @@ static void *coalesce(void *bp) {
 	 * Coalescing current and previous into one free block. */
 	else if (!prev_alloc && next_alloc) {
 
+                dbg_printf("In colaesce with previous\n");
 		prev_blkp = PREV_BLKP(bp);	
 
 		size +=  GET_SIZE(FTRP(PREV_BLKP(bp)));
@@ -305,7 +307,10 @@ static void *coalesce(void *bp) {
 		 * and add newly coalesced block
 		 * to list */
 		remove_from_list(prev_blkp);
-		insert_in_list(bp);
+                insert_in_list(bp);
+                dbg_printf("Heap after coalesce\n");
+                mm_checkheap(VERBOSE); 
+
 	}
 
 	/* Case : Previous  and Next both free
@@ -344,16 +349,19 @@ static void *find_fit(size_t asize) {
 	/* Start iteration from first free block*/
 	bp = free_root;
 
+        dbg_printf("In find fit\n");
 	while (bp != NULL) {
 		/* GET_ALLOC is just put for safety , will remove
 		 * this once correctness verified */ 
 		if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+			dbg_printf("Find Fit : found match\n");
 			return bp;
 		}
 
 		bp = NEXT_FREE_BLKP(bp);
 	}
 
+	dbg_printf("Find Fit : no match\n");
 	return NULL; /* No fit */
 }
 
@@ -475,7 +483,6 @@ void *calloc (size_t nmemb, size_t size) {
 static void * NEXT_FREE_BLKP(void *bp) {
 
 	if (GET(bp) == 0){
-	        dbg_printf("In  == 0\n");
 		return NULL;
 	} 
 	return (start_of_heap + GET(bp));
@@ -488,7 +495,6 @@ static void * PREV_FREE_BLKP(void *bp) {
 
 
 	if (GET((char *)(bp) + WSIZE) == 0) {
-	        dbg_printf("In  == 0\n");
 		return NULL;
 	} 
 
@@ -515,8 +521,7 @@ static void insert_in_list(void *bp) {
 	 * set block as root and both
 	 * its pointers to zero */ 
 	if(free_root == NULL) {
-	        dbg_printf("In free root == NULL\n");
-         	free_root = bp;
+		free_root = bp;
 		SET_NEXT_FREE_BLKP(free_root,0);
 		SET_PREV_FREE_BLKP(free_root,0);
 	}
@@ -569,9 +574,18 @@ static void remove_from_list(void *bp) {
 	else {
 		prev_blkp = PREV_FREE_BLKP(bp);
 		next_blkp = NEXT_FREE_BLKP(bp);
-		SET_NEXT_FREE_BLKP(prev_blkp,(unsigned long)next_blkp);
-		SET_PREV_FREE_BLKP(next_blkp,(unsigned long)prev_blkp);
 
+		/* If block to remove is last element in list */
+		if(next_blkp == NULL) {
+			SET_NEXT_FREE_BLKP(prev_blkp,0);
+		}
+
+		/* If block to remove is in 
+		 * middle of list */
+		else {
+			SET_NEXT_FREE_BLKP(prev_blkp,(unsigned long)next_blkp);
+			SET_PREV_FREE_BLKP(next_blkp,(unsigned long)prev_blkp);
+		}
 	}
 
 }
@@ -593,52 +607,78 @@ static void printblock(void *bp) {
 		return;
 	}
 
-        if (halloc) {
+	if (halloc) {
 
-	heap_printf("%p: header: [%u:%c] footer: [%u:%c]\n", bp, 
-			(unsigned int)hsize, (halloc ? 'a' : 'f'), 
-			(unsigned int)fsize, (falloc ? 'a' : 'f')); 
-         }
+		heap_printf("%p: header: [%u:%c] footer: [%u:%c]\n", bp, 
+				(unsigned int)hsize, (halloc ? 'a' : 'f'), 
+				(unsigned int)fsize, (falloc ? 'a' : 'f')); 
+	}
 
-        else {
-	heap_printf("%p: header: [%u:%c] next: [%lx] prev: [%lx] footer: [%u:%c]\n", bp, 
-			(unsigned int)hsize, (halloc ? 'a' : 'f'),(unsigned long)NEXT_FREE_BLKP(bp),
-                       (unsigned long) PREV_FREE_BLKP(bp),(unsigned int)fsize, (falloc ? 'a' : 'f')); 
+	else {
+		heap_printf("%p: header: [%u:%c] next: [%lx] prev: [%lx] footer: [%u:%c]\n", bp, 
+				(unsigned int)hsize, (halloc ? 'a' : 'f'),(unsigned long)NEXT_FREE_BLKP(bp),
+				(unsigned long) PREV_FREE_BLKP(bp),(unsigned int)fsize, (falloc ? 'a' : 'f')); 
 
-        }
+	}
 }
 
 static void checkblock(void *bp) {
-	if ((size_t)bp % 8)
+	if ((size_t)bp % 8){
 		heap_printf("Error: %p is not doubleword aligned\n", bp);
-	if (GET(HDRP(bp)) != GET(FTRP(bp)))
+	}
+	if (GET(HDRP(bp)) != GET(FTRP(bp))) {
 		heap_printf("Error: header does not match footer\n");
+	}
 }
+
 
 /* 
  * checkheap - Minimal check of the heap for consistency 
  */
 void mm_checkheap(int verbose) {
+
+	return;
 	char *bp = heap_listp;
-
-	if (verbose)
+	int next_count = 0;	
+	if (verbose) {
 		heap_printf("Heap (%p):\n", heap_listp);
+	}
 
-	if ((GET_SIZE(HDRP(heap_listp)) != DSIZE) || !GET_ALLOC(HDRP(heap_listp)))
+	if ((GET_SIZE(HDRP(heap_listp)) != DSIZE) || !GET_ALLOC(HDRP(heap_listp))) {
 		heap_printf("Bad prologue header\n");
-
+	}
 	checkblock(heap_listp);
 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-		if (verbose) 
+		if (verbose) {
 			printblock(bp);
-
+		}
 		checkblock(bp);
 	}
 
+	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+		if (!GET_ALLOC(HDRP(bp))) {
+			if (NEXT_FREE_BLKP(bp) == NULL) {
+				next_count++;
+			}
+
+		}
+	}
+
+	if (next_count > 1 ) {
+		heap_printf("Free list error : has more than one endpoint\n");
+	}
+	if (next_count == 0 ) {
+		heap_printf("Free list error : has no endpoint\n");
+	}
+
+
+
 	if (verbose)
 		printblock(bp);
-	if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp))))
+	if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp)))) {
 		heap_printf("Bad epilogue header\n");
+	}
+
 }
 
