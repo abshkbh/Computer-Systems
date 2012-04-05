@@ -42,7 +42,7 @@
 /* Basic macros and constants */
 #define WSIZE 4            /* Word and Header / Footer size */
 #define DSIZE 8            /* Double word size */
-#define CHUNKSIZE (1<<12) /* Extend heap by this amount */
+#define CHUNKSIZE (1<<10) /* Extend heap by this amount */
 #define MIN_BLOCK_SIZE 16 /* Minimum block size */
 
 #define MAX(x,y) (( (x) > (y) ) ? (x) : (y))
@@ -118,7 +118,7 @@ static char * start_of_heap;
 static char * heap_listp;
 
 /* Points to first free block in list */
-static char * free_root = NULL;
+static char * free_root;
 /*
  * Initialize: return -1 on error, 0 on success.
  */
@@ -349,7 +349,7 @@ static void *find_fit(size_t asize) {
 	/* Start iteration from first free block*/
 	bp = free_root;
 
-        dbg_printf("In find fit\n");
+        dbg_printf("In find fit for adjusted size = %lu\n",(unsigned long)asize);
 	while (bp != NULL) {
 		/* GET_ALLOC is just put for safety , will remove
 		 * this once correctness verified */ 
@@ -455,9 +455,15 @@ void *realloc(void *oldptr, size_t size) {
  * needed to run the traces.
  */
 void *calloc (size_t nmemb, size_t size) {
-	nmemb = nmemb;  /* To suppress warnings for now */	
-	size = size;	
-	return NULL;
+
+	size_t bytes = nmemb * size;
+	void *newptr;
+	newptr = malloc(bytes);
+	if(newptr != NULL) {
+		memset(newptr, 0, bytes);
+	}
+	return newptr;
+
 }
 
 
@@ -482,10 +488,12 @@ void *calloc (size_t nmemb, size_t size) {
  * to start of heap  */
 static void * NEXT_FREE_BLKP(void *bp) {
 
-	if (GET(bp) == 0){
+        unsigned int next = GET(bp);
+
+	if (next == 0){
 		return NULL;
 	} 
-	return (start_of_heap + GET(bp));
+	return (start_of_heap + next);
 }
 
 /* Get address of previous free block pointer
@@ -493,12 +501,13 @@ static void * NEXT_FREE_BLKP(void *bp) {
  * to start of heap  */
 static void * PREV_FREE_BLKP(void *bp) {
 
+        unsigned int prev =  GET((char *)(bp) + WSIZE);  
 
-	if (GET((char *)(bp) + WSIZE) == 0) {
+	if (prev == 0) {
 		return NULL;
 	} 
 
-	return (start_of_heap + GET((char *)(bp) + WSIZE));
+	return (start_of_heap + prev);
 }
 
 /* Set address of next free block pointer
@@ -637,7 +646,7 @@ static void checkblock(void *bp) {
  */
 void mm_checkheap(int verbose) {
 
-	return;
+        return;
 	char *bp = heap_listp;
 	int next_count = 0;	
 	if (verbose) {
