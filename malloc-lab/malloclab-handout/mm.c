@@ -66,23 +66,6 @@
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE((char *)(bp) -WSIZE))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE((char *)(bp) -DSIZE))
 
-/* Given free block pointer bp,compute address of 
- * next and previous free blocks 
- * Free blocks are designed like normal blocks , the
- * pointer points to one word after the Header. 
- * Header + WSIZE = Next Free Block Address
- * Header + 2*WSIZE = Previous Free Block Address */
-
-/* #define NEXT_FREE_BLKP(bp) ((GET(bp) == 0) ? NULL : (0x800000000 + GET(bp)))
-#define PREV_FREE_BLKP(bp) ((GET((char *)(bp) + WSIZE) == 0) ? NULL : (0x800000000 + GET((char *)(bp) + WSIZE)) */
-
-/* Given free block pointer bp,
- * SET address of its next and previous free
- * block pointers */
-/* #define SET_NEXT_FREE_BLKP(bp,val) PUT(((char *)(bp)),(val & (~0)))
-#define SET_PREV_FREE_BLKP(bp,val) PUT(((char *)(bp) + WSIZE),(val & (~0))) */
-
-
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -111,7 +94,7 @@
 
 /* Function prototypes for static functions defined below */
 static void *extend_heap(size_t words);
-//static void *coalesce(void *bp,int index);
+static void *coalesce(void *bp);
 static void *find_fit(size_t asize,int *index);
 static void place(void *bp,size_t asize,int index);
 static void printblock(void *bp);
@@ -147,9 +130,8 @@ int mm_init(void) {
 
         start_of_heap = heap_listp;
 	dbg_printf("Heap list is %p\n",start_of_heap);
-	//	PUT(heap_listp,0);   /* Alignment Padding */
-
-	/* Initializing root pointers of all free lists */
+	
+        /* Initializing root pointers of all free lists */
 	free_root = (void *)(heap_listp);
 	dbg_printf("Free root array  is %p\n",free_root);
 	for (i = 0 ; i < NUM_FREE_LISTS ; i++) {
@@ -160,25 +142,12 @@ int mm_init(void) {
 
 	/* heap starts here */
 	heap_listp = heap_listp + (NUM_FREE_LISTS)*DSIZE;
-//	start_of_heap = heap_listp;
 	PUT(heap_listp,0);   /* Alignment Padding */
 	dbg_printf("New Heap list is %p\n",start_of_heap);
-
-	// PUT(heap_listp + ((NUM_FREE_LISTS + 1)*WSIZE),PACK(DSIZE,1)); /* Prologue Header */
-	//	PUT(heap_listp + ((NUM_FREE_LISTS + 2)*WSIZE),PACK(DSIZE,1)); /* Prologue Footer */
-	//	PUT(heap_listp + ((NUM_FREE_LISTS + 3)*WSIZE),PACK(0,1)); /* Epilogue Footer */
-	//	heap_listp += ((NUM_FREE_LISTS + 2)*WSIZE);
-
-
 	PUT(heap_listp +  (1*WSIZE),PACK(DSIZE,1)); /* Prologue Header */
 	PUT(heap_listp + (2*WSIZE),PACK(DSIZE,1)); /* Prologue Footer */
 	PUT(heap_listp + (3*WSIZE),PACK(0,1)); /* Epilogue Footer */
 	heap_listp += 2*WSIZE;
-
-
-
-
-
 
 	dbg_printf("Heap list is %p\n",heap_listp);
 
@@ -219,9 +188,7 @@ static void *extend_heap(size_t words) {
 
 	/* Coalesce if previous block was free 
 	 * Coalescing also inserts the block in the free list  */
-        insert_in_list(bp,NUM_FREE_LISTS - 1);
-//	return	coalesce(bp,NUM_FREE_LISTS - 1);
-        return bp;
+	return	coalesce(bp);
 
 }
 
@@ -242,7 +209,6 @@ void *malloc (size_t size) {
 	}
 
 	/* Adjust block size to include overhead and alignment reqs. */
-	//asize = ALIGN(size);
 	if (size <= DSIZE)
 		asize = 2*DSIZE;
 	else
@@ -280,7 +246,6 @@ void *malloc (size_t size) {
 void free (void *ptr) {
 
 	size_t size;
-	int index;
 	if(!ptr) { 
 		return;
 	}
@@ -295,111 +260,116 @@ void free (void *ptr) {
 	 * in appropriate free list is done along
 	 * with coalescing in coalesce
 	 * function itself */
-	// HOW DO I KOW WHAT LIST ptr belongs to ??
-	index = find_list(size);
-
-	insert_in_list(ptr,index);
-
-	//        coalesce(ptr,index);
+	coalesce(ptr);
 	dbg_printf("[After Coalesce] FREE\n");
 	mm_checkheap(VERBOSE);
 
 }
 
-/* Coalesces contiguous free blocks in free list = index.
- * Also responsible for adding final
- * coalesced block to free list */
-/* static void *coalesce(void *bp,int index) {
+/* Coalesces contiguous free blocks and places them in 
+ * appropriate free lists */
+static void *coalesce(void *bp) {
 
-	size_t prev_alloc,next_alloc,size;
+	size_t prev_alloc,next_alloc,size,s1,s2;
 	void *next_blkp;
 	void *prev_blkp;
 	int temp_index;
 
 	prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
 	next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-	size = GET_SIZE(HDRP(bp)); */
+	size = GET_SIZE(HDRP(bp)); 
 
 	/* Case : Both previous and next are allocated
-	 * No Coalescing just insert free block in list */
-/*	if (prev_alloc && next_alloc) {
-		insert_in_list(bp,index);	
+	 * No Coalescing just insert free block in appropriate list */
+	if (prev_alloc && next_alloc) {
+		temp_index = find_list(size);
+		dbg_printf("COALESCE : No coalesce Inserting bp = %p in list = %d\n",bp,temp_index);
+		insert_in_list(bp,temp_index);	
 		return bp;
-	} */
+	} 
 
 
 	/* Case : Previous allocated but Next is free
 	 * Coalescing current and next into one free block. */
-/*	else if (prev_alloc && !next_alloc) {
+	else if (prev_alloc && !next_alloc) {
 
-		dbg_printf("In colaesce with next list LIST = %d\n",index);
 		next_blkp = NEXT_BLKP(bp);
-		size +=  GET_SIZE(HDRP(NEXT_BLKP(bp)));
+		s1 =  GET_SIZE(HDRP(NEXT_BLKP(bp)));
+		size += s1;
 		PUT(HDRP(bp),PACK(size,0));
-		PUT(FTRP(bp),PACK(size,0)); */
+		PUT(FTRP(bp),PACK(size,0)); 
 
-		/* Remove next block from free list 
-		 * = index, and add newly coalesced block
+		/* Remove next block from its free list
+		 * and add newly coalesced block
 		 * to the appropriate free list */
-/*		remove_from_list(next_blkp,index);
+		temp_index = find_list(s1);
+		dbg_printf("COALESCE : With next Removing  bp = %p from list = %d\n",next_blkp,temp_index);
+		remove_from_list(next_blkp,temp_index);
 		temp_index = find_list(size);
+		dbg_printf("COALESCE : With next Inserting  bp = %p in list = %d\n",bp,temp_index);
 		insert_in_list(bp,temp_index); 
 
-	} */
+	} 
 
 
 	/* Case : Next allocated but Previous is free
 	 * Coalescing current and previous into one free block. */
-/*	else if (!prev_alloc && next_alloc) {
+	else if (!prev_alloc && next_alloc) {
 
 		dbg_printf("In colaesce with previous\n");
 		prev_blkp = PREV_BLKP(bp);	
-
-		size +=  GET_SIZE(FTRP(PREV_BLKP(bp)));
+		s2 =  GET_SIZE(FTRP(PREV_BLKP(bp)));
+		size +=  s2;
 		PUT(FTRP(bp),PACK(size,0));
 		PUT(HDRP(PREV_BLKP(bp)),PACK(size,0));
-		bp = PREV_BLKP(bp); */
+		bp = PREV_BLKP(bp); 
 
-		/* Remove previous block from free list
-		 * = index ,and add newly coalesced block
+		/* Remove previous block from its free list
+		 * and add newly coalesced block
 		 * to the appropriate free list */
-/*		remove_from_list(prev_blkp,index);
+		temp_index = find_list(s2);
+		dbg_printf("COALESCE : With previous Removing  bp = %p from list = %d\n",prev_blkp,temp_index);
+		remove_from_list(prev_blkp,temp_index);
 		temp_index = find_list(size);
+		dbg_printf("COALESCE : With previous Inserting  bp = %p in list = %d\n",bp,temp_index);
 		insert_in_list(bp,temp_index);
-		dbg_printf("Heap after coalesce\n");
-		mm_checkheap(VERBOSE); */
 
-	//}
+	}
 
 	/* Case : Previous  and Next both free
 	 * Coalescing previous,current and next into one
 	 * big free block */
-//	else {
+	else {
 
-/*		dbg_printf("In colaesce with previous and next\n");
+		dbg_printf("In colaesce with previous and next\n");
 		prev_blkp = PREV_BLKP(bp);	
 		next_blkp = NEXT_BLKP(bp);	
-
-
-		size +=  GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+		s1 = GET_SIZE(FTRP(NEXT_BLKP(bp))); 
+		s2 = GET_SIZE(HDRP(PREV_BLKP(bp))); 
+		size +=  s1 + s2;
 		PUT(HDRP(PREV_BLKP(bp)),PACK(size,0));
 		PUT(FTRP(NEXT_BLKP(bp)),PACK(size,0));
-		bp = PREV_BLKP(bp); */
+		bp = PREV_BLKP(bp); 
 
 		/* Remove previous and next block from 
-		 * free list = index and add newly 
-		 * coalesced blok to appropriate free list */
-/*		remove_from_list(prev_blkp,index);
-		remove_from_list(next_blkp,index);
+		 * their free lists  and add newly 
+		 * coalesced blocks to appropriate free list */
+		temp_index = find_list(s1);	
+		dbg_printf("COALESCE : With next+prev Removing  bp = %p from list = %d\n",next_blkp,temp_index);
+		remove_from_list(next_blkp,temp_index);
+		temp_index = find_list(s2);	
+		dbg_printf("COALESCE : With next+prev Removing  bp = %p from list = %d\n",prev_blkp,temp_index);
+		remove_from_list(prev_blkp,temp_index);
 		temp_index = find_list(size);
-		insert_in_list(bp,temp_index); */
+		dbg_printf("COALESCE : With next+prev Inserting  bp = %p in list = %d\n",bp,temp_index);
+		insert_in_list(bp,temp_index); 
 
-	//}
+	}
 
-   /*     mm_checkheap(VERBOSE);
+	mm_checkheap(VERBOSE);
 	return bp;
 
-} */
+} 
 
 /* Returns the index of most suitable list
  * for block size = asize */
@@ -428,30 +398,6 @@ static int find_list(size_t asize) {
 
 
 	return index;
-
-
-
-	/*	switch(asize) {
-
-		case (asize <= RANGE_0) : index = 0;
-		dbg_printf("Find List : Searching in list = 0");
-		break;
-
-		case (asize <= RANGE_1) : index = 1;
-		dbg_printf("Find List : Searching in list = 1");
-		break;
-
-		case (asize <= RANGE_2) : index = 2;
-		dbg_printf("Find List : Searching in list = 2");
-		break;
-
-		default : index = 3;
-		dbg_printf("Find List : Searching in list = 3");
-
-		}
-
-
-		return index; */
 
 }
 
@@ -493,23 +439,6 @@ static void *find_fit(size_t asize,int *index) {
 	*index = -1;
 	return NULL; 
 
-
-	/* Start iteration from first free block*/
-	//	bp = free_root;
-
-	//	while (bp != NULL) {
-	/* GET_ALLOC is just put for safety , will remove
-	 * this once correctness verified */ 
-	//		if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-	//			dbg_printf("Find Fit : found match\n");
-	//			return bp;
-	//		}
-
-	//		bp = NEXT_FREE_BLKP(bp);
-	//	}
-
-	//	dbg_printf("Find Fit : no match\n");
-	//	return NULL; /* No fit */
 }
 
 /* place - Place asize in block bp in free list number =
@@ -638,15 +567,12 @@ void *calloc (size_t nmemb, size_t size) {
  * to start of heap  */
 static void * NEXT_FREE_BLKP(void *bp) {
 
-        dbg_printf("In next free bp = %p\n",bp);
-        dbg_printf("Value is  = %x\n",*(unsigned int *)bp);
-        unsigned int next = GET(bp);
+	unsigned int next = GET(bp);
 
 	if (next == 0){
 		return NULL;
 	} 
-        dbg_printf("Start of heap value = %p\n",(void *)start_of_heap );
-        dbg_printf("Ret value = %p\n",(void *)(start_of_heap + next));
+
 	return (start_of_heap + next);
 } 
 
@@ -667,7 +593,6 @@ static void * PREV_FREE_BLKP(void *bp) {
 /* Set address of next free block pointer
  * of free block bp */
 static void  SET_NEXT_FREE_BLKP(void *bp,unsigned long val) {
-        dbg_printf("In SET NEXT FREE : bp = %p val = %lx and we will get = %x",bp,val,(unsigned int)(val & (~0)));
 	PUT(bp,(val & (~0)));
 }
 
@@ -695,23 +620,16 @@ static void insert_in_list(void *bp,int index) {
 	 * set old free root's prev 
 	 * pointer to new free root  */ 
 	else {
-	        dbg_printf("Root of %d is %p\n",index,free_root[index]);	
-                temp = free_root[index];
+		temp = free_root[index];
 		free_root[index] = bp;
-	        dbg_printf("STEP 0 : Node to insert is %p\n",bp);	
-	        dbg_printf("STEP 0 : Old root is %p\n",temp);	
-	        dbg_printf("STEP 1 : New Root of %d is %p\n",index,free_root[index]);	
 		SET_NEXT_FREE_BLKP(free_root[index],(unsigned long)temp);
-	        dbg_printf("STEP 2 : Next of Root of %d is %p\n",index,NEXT_FREE_BLKP(free_root[index]));	
 		SET_PREV_FREE_BLKP(free_root[index],0);
-	        dbg_printf("STEP 3 : Prev of Root of %d is %p\n",index,PREV_FREE_BLKP(free_root[index]));	
 		SET_PREV_FREE_BLKP(temp,(unsigned long)free_root[index]);
-	        dbg_printf("STEP 4 : Prev of Old Root of %d is %p\n",index,PREV_FREE_BLKP(temp));	
 	}
 
 	dbg_printf("Insert : in list = %d\n",index);
-        printblock(bp);
-        mm_checkheap(VERBOSE);   
+	printblock(bp);
+	mm_checkheap(VERBOSE);   
 
 }
 
@@ -762,10 +680,7 @@ static void remove_from_list(void *bp,int index) {
 		}
 	}
 
-
-	dbg_printf("Remove : from list = %d\n",index);
-        mm_checkheap(VERBOSE);
-
+	mm_checkheap(VERBOSE);
 
 }
 
@@ -774,9 +689,9 @@ static void remove_from_list(void *bp,int index) {
 
 
 static void printblock(void *bp) {
-        return;
-	size_t hsize, halloc, fsize, falloc;
+	return;
 
+	size_t hsize, halloc, fsize, falloc;
 	hsize = GET_SIZE(HDRP(bp));
 	halloc = GET_ALLOC(HDRP(bp));  
 	fsize = GET_SIZE(FTRP(bp));
@@ -803,7 +718,6 @@ static void printblock(void *bp) {
 }
 
 static void checkblock(void *bp) {
-        return;
 	if ((size_t)bp % 8){
 		heap_printf("Error: %p is not doubleword aligned\n", bp);
 	}
@@ -815,8 +729,7 @@ static void checkblock(void *bp) {
 
 /* Checks all the free lists for consistency */
 static void checkfreelists() {
-
-        return;
+	return;
 	int i;
 
 	/* Traverse all free lists for consistency in allocation */
@@ -841,8 +754,7 @@ static void checkfreelists() {
  * checkheap - Minimal check of the heap for consistency 
  */
 void mm_checkheap(int verbose) {
-
-        return;
+	return;
 	char *bp = heap_listp;
 	int next_count = 0;	
 	int i;
@@ -895,9 +807,9 @@ void mm_checkheap(int verbose) {
 
 					printblock(bp);
 
-                                        if (PREV_FREE_BLKP(bp) != NULL) {
-                                              if (NEXT_FREE_BLKP(PREV_FREE_BLKP(bp)) != bp)                                           
-						      heap_printf("Free list [%d] is corrupted",i);
+					if (PREV_FREE_BLKP(bp) != NULL) {
+						if (NEXT_FREE_BLKP(PREV_FREE_BLKP(bp)) != bp)                                           
+							heap_printf("Free list [%d] is corrupted",i);
 					}
 
 					if (NEXT_FREE_BLKP(bp) != NULL) {
@@ -924,7 +836,6 @@ void mm_checkheap(int verbose) {
 		}
 
 	}
-
 
 
 }
