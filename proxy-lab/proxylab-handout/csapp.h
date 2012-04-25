@@ -37,6 +37,7 @@
 /* Simplifies calls to bind(), connect(), and accept() */
 /* $begin sockaddrdef */
 typedef struct sockaddr SA;
+typedef socklen_t SL;
 /* $end sockaddrdef */
 
 /* Persistent state for the robust I/O (Rio) package */
